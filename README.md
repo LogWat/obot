@@ -1,0 +1,2 @@
+# obot
+ゲーム用DiscordBot
