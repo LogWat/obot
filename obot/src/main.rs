@@ -2,14 +2,15 @@ use std::{
     env,
     sync::{Arc, Mutex},
     collections::{HashMap, HashSet},
-}
+    error::Error,
+};
 
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready},
+    model::{channel::Message, gateway::Ready, prelude::*},
     framework::{
         StandardFramework,
-    }
+    },
     http::Http,
     prelude::*,
 };
@@ -25,8 +26,8 @@ impl EventHandler for Handler {
             .expect("DISCORD_LOG_CHANNEL_ID must be a valid channel ID");
         log_channel_id.send_message(&ctx.http, |m| {
             m.embed(|e| {
-                e.title("Bot started");
-                    .description(format!("{} is now online!", ready.user.name));
+                e.title("Bot started")
+                    .description(format!("{} is now online!", ready.user.name))
                     .color(0x00ff00)
             })
         }).await.expect("Failed to send message");
@@ -46,9 +47,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (owners, bot_id) = match http.get_current_application_info().await {
         Ok(info) => {
             let mut owners = HashSet::new();
-            owners.insert(info.owner.id);
-
-            (owners, info.id)
+            if let Some(team) = info.team {
+                owners.insert(team.owner_user_id);
+            } else {
+                owners.insert(info.owner.id);
+            }
+            match http.get_current_user().await {
+                Ok(bot_id) => (owners, bot_id.id),
+                Err(why) => panic!("Could not access the bot id: {:?}", why),
+            }
         },
         Err(why) => panic!("Could not access application info: {:?}", why),
     };
@@ -57,9 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .configure(|c| c
             .owners(owners)
             .prefix(";")
-            .owners(owners)
             .on_mention(Some(bot_id))
-            .group(&GENERAL_GROUP)
         );
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
@@ -69,8 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         | GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGE_REACTIONS
-        | GatewayIntents::GUILD_MEMBERS
+        | GatewayIntents::DIRECT_MESSAGE_REACTIONS;
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
@@ -80,4 +84,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
     }
+
+    Ok(())
 }
