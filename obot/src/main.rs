@@ -1,19 +1,22 @@
 use std::{
     env,
-    sync::{Arc, Mutex},
-    collections::{HashMap, HashSet},
+    collections::{HashSet},
+    sync::{Arc},
     error::Error,
 };
 
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready, prelude::*},
+    model::{gateway::Ready, prelude::*},
     framework::{
         StandardFramework,
     },
     http::Http,
     prelude::*,
 };
+
+mod cache;
+use cache::*;
 
 struct Handler;
 #[async_trait]
@@ -75,11 +78,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::DIRECT_MESSAGE_REACTIONS;
+        
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
         .await
         .expect("Error creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
+    }
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
