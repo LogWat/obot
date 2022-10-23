@@ -1,3 +1,7 @@
+mod cache;
+mod owner;
+mod commands;
+
 use std::{
     env,
     collections::{HashSet},
@@ -10,13 +14,23 @@ use serenity::{
     model::{gateway::Ready, prelude::*},
     framework::{
         StandardFramework,
+        standard::macros::{group},
     },
     http::Http,
     prelude::*,
 };
 
-mod cache;
 use cache::*;
+use commands::{
+    dbg::*,
+};
+
+#[group]
+#[description = "Owner commands"]
+#[summary("Owner")]
+#[commands(shutdown)]
+struct Owner;
+
 
 struct Handler;
 #[async_trait]
@@ -65,10 +79,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let framework = StandardFramework::new()
         .configure(|c| c
-            .owners(owners)
-            .prefix(";")
+            .owners(owners.clone())
+            .prefix("/")
             .on_mention(Some(bot_id))
-        );
+        )
+        .group(&OWNER_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
@@ -78,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::DIRECT_MESSAGE_REACTIONS;
-        
+
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
@@ -88,6 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     {
         let mut data = client.data.write().await;
         data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
+        data.insert::<Owners>(Arc::new(Mutex::new(owners)));
     }
 
     if let Err(why) = client.start().await {
