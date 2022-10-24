@@ -45,7 +45,7 @@ impl EventHandler for Handler {
             m.embed(|e| {
                 e.title("Bot started")
                     .description(format!("{} is now online!", ready.user.name))
-                    .color(0x00ff00)
+                    .color(0x00ffff)
             })
         }).await.expect("Failed to send message");
     }
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners.clone())
-            .prefix("/")
+            .prefix(";")
             .on_mention(Some(bot_id))
         )
         .group(&OWNER_GROUP);

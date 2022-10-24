@@ -12,6 +12,7 @@ use crate::owner;
 
 #[command]
 pub async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
+    println!("Shutdown command received");
     let data = ctx.data.read().await;
     let manager = data.get::<SharedManagerContainer>().cloned().unwrap();
     let mut manager = manager.lock().await;
