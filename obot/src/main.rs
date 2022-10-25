@@ -22,15 +22,14 @@ use serenity::{
 
 use cache::*;
 use commands::{
-    dbg::*,
+    dbg::*, help::*,
 };
 
 #[group]
-#[description = "Owner commands"]
-#[summary("Owner")]
+#[description("General commands")]
+#[summary("General")]
 #[commands(shutdown)]
-struct Owner;
-
+struct General;
 
 struct Handler;
 #[async_trait]
@@ -83,7 +82,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .prefix(";")
             .on_mention(Some(bot_id))
         )
-        .group(&OWNER_GROUP);
+        .help(&MY_HELP)
+        .group(&GENERAL_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
@@ -105,6 +105,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
         data.insert::<Owners>(Arc::new(Mutex::new(owners)));
     }
+
+    let shard_manager = client.shard_manager.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to register ctrl+c handler");
+        shard_manager.lock().await.shutdown_all().await;
+    });
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
