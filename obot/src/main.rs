@@ -1,19 +1,35 @@
+mod cache;
+mod owner;
+mod commands;
+
 use std::{
     env,
-    sync::{Arc, Mutex},
-    collections::{HashMap, HashSet},
+    collections::{HashSet},
+    sync::{Arc},
     error::Error,
 };
 
 use serenity::{
     async_trait,
-    model::{channel::Message, gateway::Ready, prelude::*},
+    model::{gateway::Ready, prelude::*},
     framework::{
         StandardFramework,
+        standard::macros::{group},
     },
     http::Http,
     prelude::*,
 };
+
+use cache::*;
+use crate::commands::{
+    dbg::*, help::*,
+};
+
+#[group]
+#[description("General commands")]
+#[summary("General")]
+#[commands(shutdown)]
+struct General;
 
 struct Handler;
 #[async_trait]
@@ -28,9 +44,20 @@ impl EventHandler for Handler {
             m.embed(|e| {
                 e.title("Bot started")
                     .description(format!("{} is now online!", ready.user.name))
-                    .color(0x00ff00)
+                    .color(0x00ffff)
             })
         }).await.expect("Failed to send message");
+    }
+
+    async fn message(&self, ctx: Context, msg: Message) {
+        let self_id = ctx.http.get_current_user().await.unwrap().id;
+        for mention in msg.mentions.iter() {
+            if mention.id == self_id {
+                msg.channel_id.say(&ctx.http, format!("Hello, {}!", msg.author.name))
+                    .await
+                    .expect("Failed to send message");
+            }
+        }
     }
 }
 
@@ -62,24 +89,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let framework = StandardFramework::new()
         .configure(|c| c
-            .owners(owners)
-            .prefix(";")
+            .owners(owners.clone())
+            .prefix("/")
             .on_mention(Some(bot_id))
-        );
+        )
+        .help(&MY_HELP)
+        .group(&GENERAL_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
     let intents = GatewayIntents::GUILDS
         | GatewayIntents::GUILD_WEBHOOKS
+        | GatewayIntents::MESSAGE_CONTENT
         | GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::DIRECT_MESSAGE_REACTIONS;
+
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
         .await
         .expect("Error creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
+        data.insert::<Owners>(Arc::new(Mutex::new(owners)));
+    }
+
+    let shard_manager = client.shard_manager.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to register ctrl+c handler");
+        shard_manager.lock().await.shutdown_all().await;
+    });
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
