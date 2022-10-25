@@ -21,7 +21,7 @@ use serenity::{
 };
 
 use cache::*;
-use commands::{
+use crate::commands::{
     dbg::*, help::*,
 };
 
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let framework = StandardFramework::new()
         .configure(|c| c
             .owners(owners.clone())
-            .prefix(";")
+            .prefix("/")
             .on_mention(Some(bot_id))
         )
         .help(&MY_HELP)
@@ -100,6 +100,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
     let intents = GatewayIntents::GUILDS
         | GatewayIntents::GUILD_WEBHOOKS
+        | GatewayIntents::MESSAGE_CONTENT
         | GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::DIRECT_MESSAGES
