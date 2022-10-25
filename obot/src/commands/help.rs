@@ -1,7 +1,7 @@
 use serenity::{
     framework::standard::{
         help_commands,
-        macros::{command},
+        macros::{help},
         CommandResult, Args, HelpOptions, CommandGroup
     },
     model::prelude::*,
