@@ -48,6 +48,17 @@ impl EventHandler for Handler {
             })
         }).await.expect("Failed to send message");
     }
+
+    async fn message(&self, ctx: Context, msg: Message) {
+        let self_id = ctx.http.get_current_user().await.unwrap().id;
+        for mention in msg.mentions.iter() {
+            if mention.id == self_id {
+                msg.channel_id.say(&ctx.http, format!("Hello, {}!", msg.author.name))
+                    .await
+                    .expect("Failed to send message");
+            }
+        }
+    }
 }
 
 #[tokio::main]
