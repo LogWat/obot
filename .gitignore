@@ -1,4 +1,4 @@
 .env
 *.lock
 target/
-*.sqlite
+*.sqlite*

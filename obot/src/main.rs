@@ -69,6 +69,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
 
+    // database setup
+    let database = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename("database.sqlite")
+                .create_if_missing(true),
+        )
+        .await
+        .expect("Failed to connect to database");
+
+    sqlx::migrate!("./migrations")
+        .run(&database)
+        .await
+        .expect("Failed to run migrations");
+
+
     let http = Http::new(&token);
     
     let (owners, bot_id) = match http.get_current_application_info().await {
@@ -116,6 +133,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut data = client.data.write().await;
         data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
         data.insert::<Owners>(Arc::new(Mutex::new(owners)));
+        data.insert::<Database>(Arc::new(Mutex::new(database)));
     }
 
     let shard_manager = client.shard_manager.clone();
