@@ -31,6 +31,12 @@ use crate::commands::{
 #[commands(shutdown)]
 struct Owner;
 
+#[group]
+#[description("General commands")]
+#[summary("General")]
+#[commands(todo)]
+struct General;
+
 struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
@@ -111,7 +117,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .on_mention(Some(bot_id))
         )
         .help(&MY_HELP)
-        .group(&OWNER_GROUP);
+        .group(&OWNER_GROUP)
+        .group(&GENERAL_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
