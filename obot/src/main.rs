@@ -28,7 +28,7 @@ use crate::commands::{
 #[group]
 #[description("Owner commands")]
 #[summary("Owner")]
-#[commands(shutdown)]
+#[commands(shutdown, delmsg)]
 struct Owner;
 
 #[group]

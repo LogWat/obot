@@ -3,7 +3,10 @@ use serenity::{
         macros::{command},
         CommandResult, Args,
     },
-    model::prelude::*,
+    model::{
+        channel::GuildChannel,
+        prelude::*,
+    },
     prelude::*,
 };
 
@@ -23,6 +26,50 @@ async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
     }
 
+    Ok(())
+}
+
+#[command]
+async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+
+    let nd = match args.rest().parse::<u64>() {
+        Ok(n) => n,
+        Err(_) => {
+            msg.channel_id.say(&ctx.http, "Invalid number").await?;
+            return Ok(());
+        }
+    };
+
+    let channel: GuildChannel = msg.channel_id.to_channel(&ctx.http).await?.guild().unwrap();
+    let messages = match channel.messages(&ctx.http, |r| r.limit(nd)).await {
+        Ok(m) => m,
+        Err(_) => {
+            msg.channel_id.say(&ctx.http, "Failed to get messages").await?;
+            return Ok(());
+        }
+    };
+    if messages.len() == 0 {
+        msg.channel_id.say(&ctx.http, "No messages").await?;
+        return Ok(());
+    }
+
+    let mut ids = Vec::new();
+    for m in messages {
+        ids.push(m.id);
+    }
+    match channel.delete_messages(&ctx.http, &ids).await {
+        Ok(_) => (),
+        Err(_) => {
+            msg.channel_id.say(&ctx.http, "Failed to delete messages").await?;
+            return Ok(());
+        }
+    }
+
+    msg.channel_id.say(&ctx.http, format!("Deleted {} messages", nd)).await?;
     Ok(())
 }
 
