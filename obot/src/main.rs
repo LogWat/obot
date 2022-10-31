@@ -1,6 +1,7 @@
 mod cache;
 mod owner;
 mod commands;
+mod web;
 
 use std::{
     env,

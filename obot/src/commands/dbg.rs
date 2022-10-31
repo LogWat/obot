@@ -147,3 +147,10 @@ async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     Ok(())
 }
+
+// test command: get_maps
+// fetch api and print maps
+#[command]
+async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
+    Ok(())
+}
