@@ -17,18 +17,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: \
-        sudo apt-get install libpq-dev -y && \
-        cargo install sqlx-cli --no-default-features --features sqlite && \
-        sqlx database create && \
-        sqlx migrate run && \
+      run: |
+        cargo install sqlx-cli --no-default-features --features sqlite
+        sqlx database create
+        sqlx migrate run
         cargo build --release
       working-directory: obot
     - name: Run tests
-      run: \
-        sudo apt-get install libpq-dev -y && \
-        cargo install sqlx-cli --no-default-features --features sqlite && \
-        sqlx database create && \
-        sqlx migrate run && \
+      run: |
+        cargo install sqlx-cli --no-default-features --features sqlite
+        sqlx database create
+        sqlx migrate run
         cargo test --release
       working-directory: obot
