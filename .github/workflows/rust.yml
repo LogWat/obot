@@ -17,8 +17,16 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: cargo build --verbose
+      run: \
+        cargo install sqlx-cli --no-default-features --features sqlite && \
+        sqlx database create && \
+        sqlx migrate run && \
+        cargo build --release
       working-directory: obot
     - name: Run tests
-      run: cargo test --verbose
+      run: \
+        cargo install sqlx-cli --no-default-features --features sqlite && \
+        sqlx database create && \
+        sqlx migrate run && \
+        cargo test --release
       working-directory: obot
