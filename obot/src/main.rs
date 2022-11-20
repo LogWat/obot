@@ -1,5 +1,6 @@
 mod cache;
 mod owner;
+mod scheduler;
 mod commands;
 mod web;
 
@@ -22,6 +23,7 @@ use serenity::{
 };
 
 use cache::*;
+use scheduler::*;
 use crate::commands::{
     dbg::*, help::*,
 };
@@ -29,7 +31,7 @@ use crate::commands::{
 #[group]
 #[description("Owner commands")]
 #[summary("Owner")]
-#[commands(shutdown, delmsg, get_maps)]
+#[commands(shutdown, delmsg, get_maps, update_database)]
 struct Owner;
 
 #[group]

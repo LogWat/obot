@@ -13,7 +13,7 @@ use serenity::{
 use crate::cache::{Database, SharedManagerContainer};
 use crate::owner;
 use crate::web::{
-    api::{Api},
+    api::{Api}, handler,
 };
 
 #[command]
@@ -188,5 +188,19 @@ async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
         });
         m
     }).await.expect("Failed to send message");
+    Ok(())
+}
+
+#[command]
+async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+    match handler::check_maps(ctx).await {
+        Ok(_) => {},
+        Err(_e) => {},
+    }
+
     Ok(())
 }
