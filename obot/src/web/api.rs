@@ -8,6 +8,7 @@ use std::{
 
 use serde_json::{Value};
 
+#[derive(Debug, Clone)]
 pub struct Beatmap {
     pub title: String,
     pub artist: String,
@@ -21,7 +22,7 @@ pub struct Beatmap {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Api {
     pub http: reqwest::Client,
     pub user_id: u64,
@@ -31,9 +32,9 @@ pub struct Api {
 
 impl Api {
     pub fn new() -> Self {
-        let secret = env::var("API_KEY").expect("GAME_SECRET must be set");
+        let secret = env::var("API_SECRET").expect("API_SECRET must be set");
         let user_id = env::var("USER_ID").expect("USER_ID must be set").parse::<u64>().unwrap();
-        let base_url = env::var("BASE_URL").expect("BASE_URL must be set");
+        let base_url = env::var("API_BASE").expect("API_BASE must be set");
         let http = reqwest::Client::new();
         Self {
             http,
@@ -43,7 +44,7 @@ impl Api {
         }
     }
 
-    pub async fn update_token(&self) -> Result<String, Box<dyn Error>> {
+    pub async fn update_token(&self) -> Result<String, Box<dyn Error + Send + Sync>> {
         let url = format!("{}/oauth/token", self.base_url);
         let mut params = HashMap::new();
         params.insert("client_id", self.user_id.to_string());
@@ -77,10 +78,9 @@ impl Api {
         token: &str,
         mode: &str,
         status: &str,
-    ) -> Result<Vec<Beatmap>, Box<dyn Error>> {
-        let url = format!("{}/beatmapsets/search?m={}&s={}&q=key%3D4", self.base_url, mode, status);
-        
-        let beatmaps = match self.http.get(&url)
+    ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
+        let url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4", self.base_url, mode, status);
+        match self.http.get(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .header("Authorization", format!("Bearer {}", token))
@@ -95,7 +95,7 @@ impl Api {
                                 let title = beatmapset["title"].as_str().unwrap();
                                 let artist = beatmapset["artist"].as_str().unwrap();
                                 let creator = beatmapset["creator"].as_str().unwrap();
-                                let cover_url = beatmapset["covers"]["cover"].as_str().unwrap();
+                                let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
                                 let id = beatmapset["id"].as_u64().unwrap();
                                 let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
                                 let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
@@ -116,14 +116,12 @@ impl Api {
                                     star,
                                 }
                             }).collect::<Vec<Beatmap>>();
-                            Ok(beatmapsets)
+                            return Ok(beatmapsets);
                         },
                         Err(e) => return Err(Box::new(e)),
                     }
                 }
                 Err(e) => return Err(Box::new(e)),
             };
-
-        beatmaps
     }
 }

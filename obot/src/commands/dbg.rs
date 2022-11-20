@@ -12,6 +12,9 @@ use serenity::{
 
 use crate::cache::{Database, SharedManagerContainer};
 use crate::owner;
+use crate::web::{
+    api::{Api},
+};
 
 #[command]
 async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
@@ -152,5 +155,38 @@ async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 // fetch api and print maps
 #[command]
 async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+    let api = Api::new();
+    let token = match api.update_token().await {
+        Ok(t) => t,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
+            return Ok(());
+        }
+    };
+    let mode = "3"; // mania
+    let status = "ranked";
+    let maps = match api.get_beatmaps(&token, mode, status).await {
+        Ok(m) => m,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
+            return Ok(());
+        }
+    };
+    let mut map_list = String::new();
+    for map in maps {
+        map_list.push_str(&format!("{} - {} [{}]\n", map.artist, map.title, map.star[0]));
+    }
+    msg.channel_id.send_message(&ctx.http, |m| {
+        m.embed(|e| {
+            e.title("Ranked mania maps");
+            e.description(map_list);
+            e
+        });
+        m
+    }).await.expect("Failed to send message");
     Ok(())
 }

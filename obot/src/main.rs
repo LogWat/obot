@@ -29,7 +29,7 @@ use crate::commands::{
 #[group]
 #[description("Owner commands")]
 #[summary("Owner")]
-#[commands(shutdown, delmsg)]
+#[commands(shutdown, delmsg, get_maps)]
 struct Owner;
 
 #[group]
