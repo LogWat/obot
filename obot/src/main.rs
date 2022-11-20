@@ -23,7 +23,6 @@ use serenity::{
 };
 
 use cache::*;
-use scheduler::*;
 use crate::commands::{
     dbg::*, help::*,
 };
@@ -56,6 +55,10 @@ impl EventHandler for Handler {
                     .color(0x00ffff)
             })
         }).await.expect("Failed to send message");
+
+        // Start the scheduler
+        let ctx_clone = Arc::new(ctx);
+        let _ = scheduler::ascheduler(ctx_clone).await;
     }
 
     async fn message(&self, ctx: Context, msg: Message) {

@@ -10,7 +10,7 @@ use crate::web::{
     handler,
 };
 
-pub async fn rss_scheduler(ctx: Arc<Context>) -> Result<(), Box<dyn Error>> {
+pub async fn ascheduler(ctx: Arc<Context>) -> Result<(), Box<dyn Error>> {
     let mut scheduler = AsyncScheduler::new();
     let ctx_clone = ctx.clone();
     scheduler.every(30.minutes()).run(move || {
