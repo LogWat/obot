@@ -1,6 +1,7 @@
 mod cache;
 mod owner;
 mod commands;
+mod web;
 
 use std::{
     env,
@@ -28,8 +29,14 @@ use crate::commands::{
 #[group]
 #[description("Owner commands")]
 #[summary("Owner")]
-#[commands(shutdown)]
+#[commands(shutdown, delmsg, get_maps)]
 struct Owner;
+
+#[group]
+#[description("General commands")]
+#[summary("General")]
+#[commands(todo)]
+struct General;
 
 struct Handler;
 #[async_trait]
@@ -69,6 +76,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
 
+    // database setup
+    let database = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename("database.sqlite")
+                .create_if_missing(true),
+        )
+        .await
+        .expect("Failed to connect to database");
+
+    sqlx::migrate!("./migrations")
+        .run(&database)
+        .await
+        .expect("Failed to run migrations");
+
+
     let http = Http::new(&token);
     
     let (owners, bot_id) = match http.get_current_application_info().await {
@@ -94,7 +118,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .on_mention(Some(bot_id))
         )
         .help(&MY_HELP)
-        .group(&OWNER_GROUP);
+        .group(&OWNER_GROUP)
+        .group(&GENERAL_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
@@ -116,6 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut data = client.data.write().await;
         data.insert::<SharedManagerContainer>(Arc::clone(&client.shard_manager));
         data.insert::<Owners>(Arc::new(Mutex::new(owners)));
+        data.insert::<Database>(Arc::new(Mutex::new(database)));
     }
 
     let shard_manager = client.shard_manager.clone();

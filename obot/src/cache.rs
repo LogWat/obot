@@ -32,3 +32,10 @@ pub struct Owners;
 impl TypeMapKey for Owners {
     type Value = Arc<Mutex<HashSet<UserId>>>;
 }
+
+// データベースの接続情報を記録する
+pub struct Database;
+
+impl TypeMapKey for Database {
+    type Value = Arc<Mutex<sqlx::SqlitePool>>;
+}
