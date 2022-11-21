@@ -28,6 +28,10 @@ use crate::commands::{
     dbg::*, help::*,
 };
 
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
+
 #[group]
 #[description("Owner commands")]
 #[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
@@ -43,8 +47,10 @@ struct General;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = dotenv::dotenv() {
-        println!("Failed to load .env file: {}", e);
+        warn!("Failed to load .env file: {}", e);
     }
+
+    pretty_env_logger::init();
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
 

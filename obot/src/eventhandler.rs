@@ -2,15 +2,22 @@ use std::{
     env,
     error::Error,
     sync::Arc,
+    collections::{HashSet},
 };
 
 use serenity::{
     async_trait,
     model::{gateway::Ready, prelude::*},
+    framework::{
+        standard::{
+            macros::{hook},
+        },
+    },
     prelude::*,
 };
 
 use crate::scheduler;
+use crate::cache::{CommandCounter};
 
 pub struct Handler;
 #[async_trait]
@@ -44,4 +51,20 @@ impl EventHandler for Handler {
             }
         }
     }
+}
+
+#[hook]
+async fn unknown_command(ctx: &Context, msg: &Message, unknown_command_name: &str) {
+    msg.channel_id.say(&ctx.http, format!("Unknown command: '{}'. Try `/help`", unknown_command_name))
+        .await
+        .expect("Failed to send message");
+}
+
+// Command Counter
+#[hook]
+async fn before(ctx: &Context, _msg: &Message, command_name: &str) -> bool {
+    let mut data = ctx.data.write().await;
+    let counter = data.get_mut::<CommandCounter>().expect("Expected CommandCounter in TypeMap.");
+
+    true
 }
