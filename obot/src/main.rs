@@ -1,5 +1,6 @@
 mod cache;
 mod owner;
+mod eventhandler;
 mod scheduler;
 mod commands;
 mod web;
@@ -12,8 +13,7 @@ use std::{
 };
 
 use serenity::{
-    async_trait,
-    model::{gateway::Ready, prelude::*},
+    model::{prelude::*},
     framework::{
         StandardFramework,
         standard::macros::{group},
@@ -23,55 +23,22 @@ use serenity::{
 };
 
 use cache::*;
+use eventhandler::*;
 use crate::commands::{
     dbg::*, help::*,
 };
 
 #[group]
 #[description("Owner commands")]
-#[summary("Owner")]
+#[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
 #[commands(shutdown, delmsg, get_maps, update_database)]
 struct Owner;
 
 #[group]
 #[description("General commands")]
-#[summary("General")]
+#[summary("一般ユーザーが実行できるコマンドです")]
 #[commands(todo)]
 struct General;
-
-struct Handler;
-#[async_trait]
-impl EventHandler for Handler {
-    // This is called when the bot starts up.
-    async fn ready(&self, ctx: Context, ready: Ready) {
-        let log_channel_id: ChannelId = env::var("DISCORD_LOG_CHANNEL_ID")
-            .expect("DISCORD_LOG_CHANNEL_ID must be set")
-            .parse()
-            .expect("DISCORD_LOG_CHANNEL_ID must be a valid channel ID");
-        log_channel_id.send_message(&ctx.http, |m| {
-            m.embed(|e| {
-                e.title("Bot started")
-                    .description(format!("{} is now online!", ready.user.name))
-                    .color(0x00ffff)
-            })
-        }).await.expect("Failed to send message");
-
-        // Start the scheduler
-        let ctx_clone = Arc::new(ctx);
-        let _ = scheduler::ascheduler(ctx_clone).await;
-    }
-
-    async fn message(&self, ctx: Context, msg: Message) {
-        let self_id = ctx.http.get_current_user().await.unwrap().id;
-        for mention in msg.mentions.iter() {
-            if mention.id == self_id {
-                msg.channel_id.say(&ctx.http, format!("Hello, {}!", msg.author.name))
-                    .await
-                    .expect("Failed to send message");
-            }
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
