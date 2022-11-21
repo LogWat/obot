@@ -17,13 +17,21 @@ use crate::web::{
 };
 
 #[command]
+#[description("Bot-Processを終了します")]
 async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
-    let manager = data.get::<SharedManagerContainer>().cloned().unwrap();
+    let manager = match data.get::<SharedManagerContainer>().cloned() {
+        Some(manager) => manager,
+        None => {
+            error!("Failed to get manager(shutdown)");
+            return Ok(());
+        }
+    };
     let mut manager = manager.lock().await;
 
     if owner::is_owner(&ctx, msg.author.id).await {
         msg.channel_id.say(&ctx.http, "Shutting down...").await?;
+        info!("Shutting down by {}", msg.author.name);
         manager.shutdown_all().await;
     } else {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
@@ -33,9 +41,11 @@ async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description("引数分だけコマンドが実行されたチャンネルのメッセージを削除します")]
 async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        info!("{} tried to use delmsg", msg.author.name);
         return Ok(());
     }
 

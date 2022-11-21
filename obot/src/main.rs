@@ -83,10 +83,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             match http.get_current_user().await {
                 Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => panic!("Could not access the bot id: {:?}", why),
+                Err(why) => warn!("Could not access the bot id: {:?}", why),
             }
         },
-        Err(why) => panic!("Could not access application info: {:?}", why),
+        Err(why) => {
+            warn!("Could not access application info: {:?}", why);
+            (HashSet::new(), UserId(0))
+        }
     };
 
     let framework = StandardFramework::new()
@@ -131,7 +134,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        error!("Client error: {:?}", why);
     }
 
     Ok(())
