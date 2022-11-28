@@ -7,7 +7,7 @@ mod web;
 
 use std::{
     env,
-    collections::{HashSet},
+    collections::{HashSet, HashMap},
     sync::{Arc},
     error::Error,
 };
@@ -35,7 +35,7 @@ extern crate log;
 #[group]
 #[description("Owner commands")]
 #[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
-#[commands(shutdown, delmsg, get_maps, update_database)]
+#[commands(shutdown, delmsg, get_maps, update_database, infoc)]
 struct Owner;
 
 #[group]
@@ -115,6 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
+        .type_map_insert::<CommandCounter>(HashMap::default())
         .await
         .expect("Error creating client");
 
