@@ -168,8 +168,11 @@ async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 // test command: get_maps
 // fetch api and print maps
 #[command]
-#[description("todoを追加、削除、一覧表示します(テストコマンド)")]
-async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
+#[description("最新のbeatmapsets 50件を表示します(ranked, loved, qualified)")]
+#[max_args(1)]
+#[min_args(0)]
+#[usage("get_maps [mode] (default: ranked)")]
+async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
@@ -183,8 +186,15 @@ async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
         }
     };
     let mode = "3"; // mania
-    let status = "ranked";
-    let maps = match api.get_beatmaps(&token, mode, status).await {
+
+    let status = match arg.current() {
+        Some("ranked") => "ranked",
+        Some("loved") => "loved",
+        Some("qualified") => "qualified",
+        _ => "ranked",
+    };
+
+    let maps = match api.get_beatmaps(&token, mode, status, false).await {
         Ok(m) => m,
         Err(e) => {
             msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
@@ -207,7 +217,7 @@ async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-#[description("譜面データベースを強制的に更新します")]
+#[description("最新50件の譜面情報により譜面データベースを強制的に更新します")]
 async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
