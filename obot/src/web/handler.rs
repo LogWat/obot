@@ -1,6 +1,7 @@
 use std::{
     env,
     error::Error,
+    time,
 };
 use serenity::{
     model::{prelude::*},
@@ -14,7 +15,10 @@ use api::Api;
 // check ranked, loved, qualified beatmaps (50maps)
 // if there is a new map, post it to discord (using sqlx)
 pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync>> {
-    println!("Checking maps...");
+
+    let now = time::SystemTime::now();
+    info!(format!("check_maps started at {:?}", now));
+
     let api = Api::new();
     let token = match api.update_token().await {
         Ok(t) => t,
@@ -30,7 +34,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
     let statuses = ["ranked", "loved", "qualified"];
     let mode = "3"; // mania only
     for status in statuses.iter() {
-        let maps = match api.get_beatmaps(&token, mode, status).await {
+        let maps = match api.get_beatmaps(&token, mode, status, false).await {
             Ok(m) => m,
             Err(_e) => return Ok(()),
         };

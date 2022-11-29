@@ -4,8 +4,9 @@ use std::{
     env,
     collections::{HashMap},
     error::Error,
+    fs::File,
 };
-
+use futures::future;
 use serde_json::{Value};
 
 #[derive(Debug, Clone)]
@@ -28,6 +29,7 @@ pub struct Api {
     pub user_id: u64,
     pub secret: String,
     pub base_url: String,
+    pub download_base_url: String,
 }
 
 impl Api {
@@ -35,12 +37,14 @@ impl Api {
         let secret = env::var("API_SECRET").expect("API_SECRET must be set");
         let user_id = env::var("USER_ID").expect("USER_ID must be set").parse::<u64>().unwrap();
         let base_url = env::var("API_BASE").expect("API_BASE must be set");
+        let download_base_url = env::var("DOWNLOAD_BASE").expect("DOWNLOAD_BASE must be set");
         let http = reqwest::Client::new();
         Self {
             http,
             user_id,
             secret,
             base_url,
+            download_base_url,
         }
     }
 
@@ -74,54 +78,106 @@ impl Api {
     }
 
     pub async fn get_beatmaps(
-        &self,
+        &self, 
         token: &str,
         mode: &str,
         status: &str,
+        all_flag: bool,
     ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
-        let url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4", self.base_url, mode, status);
-        match self.http.get(&url)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await {
-                Ok(res) => {
-                    match res.text().await {
-                        Ok(text) => {
-                            let json: Value = serde_json::from_str(&text)?;
-                            let beatmapsets = json["beatmapsets"].as_array().unwrap();
-                            let beatmapsets = beatmapsets.iter().map(|beatmapset| {
-                                let title = beatmapset["title"].as_str().unwrap();
-                                let artist = beatmapset["artist"].as_str().unwrap();
-                                let creator = beatmapset["creator"].as_str().unwrap();
-                                let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
-                                let id = beatmapset["id"].as_u64().unwrap();
-                                let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
-                                let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
-                                let mode = beatmaps[0]["mode"].as_str().unwrap();
-                                let status = beatmaps[0]["status"].as_str().unwrap();
-                                let star = beatmaps.iter().map(|beatmap| {
-                                    beatmap["difficulty_rating"].as_f64().unwrap() as f32
-                                }).collect::<Vec<f32>>();
-                                Beatmap {
-                                    title: title.to_string(),
-                                    artist: artist.to_string(),
-                                    creator: creator.to_string(),
-                                    cover_url: cover_url.to_string(),
-                                    id: id as u32,
-                                    favourite_count: favourite_count as u32,
-                                    mode: mode.to_string(),
-                                    status: status.to_string(),
-                                    star,
+        let mut bmsets = Vec::new();
+        let mut cursor_string = String::new();
+        let mut url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
+
+        loop {
+            match self.http.get(&url)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Authorization", format!("Bearer {}", token))
+                .send()
+                .await {
+                    Ok(res) => {
+                        match res.text().await {
+                            Ok(text) => {
+                                let json: Value = serde_json::from_str(&text)?;
+                                let beatmapsets = json["beatmapsets"].as_array().unwrap();
+                                let beatmapsets = beatmapsets.iter().map(|beatmapset| {
+                                    let title = beatmapset["title"].as_str().unwrap();
+                                    let artist = beatmapset["artist"].as_str().unwrap();
+                                    let creator = beatmapset["creator"].as_str().unwrap();
+                                    let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
+                                    let id = beatmapset["id"].as_u64().unwrap();
+                                    let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
+                                    let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
+                                    let mode = beatmaps[0]["mode"].as_str().unwrap();
+                                    let status = beatmaps[0]["status"].as_str().unwrap();
+                                    let star = beatmaps.iter().map(|beatmap| {
+                                        beatmap["difficulty_rating"].as_f64().unwrap() as f32
+                                    }).collect::<Vec<f32>>();
+                                    Beatmap {
+                                        title: title.to_string(),
+                                        artist: artist.to_string(),
+                                        creator: creator.to_string(),
+                                        cover_url: cover_url.to_string(),
+                                        id: id as u32,
+                                        favourite_count: favourite_count as u32,
+                                        mode: mode.to_string(),
+                                        status: status.to_string(),
+                                        star,
+                                    }
+                                }).collect::<Vec<Beatmap>>();
+                                bmsets.extend(beatmapsets);
+                                if all_flag {
+                                    cursor_string = json["cursor_string"].as_str().unwrap().to_string();
+                                    url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
+                                } else {
+                                    break;
                                 }
-                            }).collect::<Vec<Beatmap>>();
-                            return Ok(beatmapsets);
-                        },
-                        Err(e) => return Err(Box::new(e)),
+                            },
+                            Err(e) => return Err(Box::new(e)),
+                        }
                     }
+                };
+        }
+
+        Ok(bmsets)
+    }
+
+    // 譜面download用method
+    pub async fn download_beatmaps(
+        &self,
+        maps: Vec<Beatmap>,
+        path: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut tasks = Vec::new();
+        for (i, beatmapset) in maps.iter().enumerate() {
+            tasks.push(self.download(beatmapset, path));
+            if (i + 1) % 5 == 0 || i == maps.len() - 1 {
+                // 5つずつ
+                // TODO: この不細工な実装をどうにかする
+                let mut tasks_copy = Vec::new();
+                std::mem::swap(&mut tasks, &mut tasks_copy);
+                let ret = future::join_all(tasks_copy)
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<()>, Box<dyn Error>>>();
+                match ret {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
                 }
-                Err(e) => return Err(Box::new(e)),
-            };
+                tasks.clear();
+            }
+        }
+
+        Ok(())
+    }
+
+    // private
+    async fn download(&self, beatmapset: &Beatmap, path: &str) -> Result<(), Box<dyn Error>> {
+        let url = format!("{}/{}?n=1", self.download_base_url, beatmapset.id);
+        let res = self.http.get(&url).send().await?;
+        let mut file = File::create(format!("{}/{}.osz", path, beatmapset.id))?;
+        let mut content = std::io::Cursor::new(res.bytes().await?);
+        std::io::copy(&mut content, &mut file)?;
+        Ok(())
     }
 }
