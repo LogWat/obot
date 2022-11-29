@@ -25,7 +25,7 @@ use serenity::{
 use cache::*;
 use eventhandler::*;
 use crate::commands::{
-    dbg::*, help::*,
+    dbg::*, help::*, game::*,
 };
 
 extern crate pretty_env_logger;
@@ -35,7 +35,7 @@ extern crate log;
 #[group]
 #[description("Owner commands")]
 #[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
-#[commands(shutdown, delmsg, get_maps, update_database, infoc)]
+#[commands(shutdown, delmsg, infoc)]
 struct Owner;
 
 #[group]
@@ -43,6 +43,12 @@ struct Owner;
 #[summary("一般ユーザーが実行できるコマンドです")]
 #[commands(todo)]
 struct General;
+
+#[group]
+#[description("Game commands")]
+#[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
+#[commands(get_maps, update_database)]
+struct Game;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -100,7 +106,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .help(&MY_HELP)
         .group(&OWNER_GROUP)
-        .group(&GENERAL_GROUP);
+        .group(&GENERAL_GROUP)
+        .group(&GAME_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html

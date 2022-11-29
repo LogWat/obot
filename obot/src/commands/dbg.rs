@@ -12,9 +12,6 @@ use serenity::{
 
 use crate::cache::{Database, SharedManagerContainer, CommandCounter};
 use crate::owner;
-use crate::web::{
-    api::{Api}, handler,
-};
 
 #[command]
 #[description("Bot-Processを終了します")]
@@ -160,72 +157,6 @@ async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         _ => {
             msg.channel_id.say(&ctx.http, "Invalid argument").await?;
         }
-    }
-
-    Ok(())
-}
-
-// test command: get_maps
-// fetch api and print maps
-#[command]
-#[description("最新のbeatmapsets 50件を表示します(ranked, loved, qualified)")]
-#[max_args(1)]
-#[min_args(0)]
-#[usage("get_maps [mode] (default: ranked)")]
-async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
-    if owner::is_owner(&ctx, msg.author.id).await == false {
-        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
-        return Ok(());
-    }
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
-            return Ok(());
-        }
-    };
-    let mode = "3"; // mania
-
-    let status = match arg.current() {
-        Some("ranked") => "ranked",
-        Some("loved") => "loved",
-        Some("qualified") => "qualified",
-        _ => "ranked",
-    };
-
-    let maps = match api.get_beatmaps(&token, mode, status, false).await {
-        Ok(m) => m,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
-            return Ok(());
-        }
-    };
-    let mut map_list = String::new();
-    for map in maps {
-        map_list.push_str(&format!("{} - {} [{}]\n", map.artist, map.title, map.star[0]));
-    }
-    msg.channel_id.send_message(&ctx.http, |m| {
-        m.embed(|e| {
-            e.title("Ranked mania maps");
-            e.description(map_list);
-            e
-        });
-        m
-    }).await.expect("Failed to send message");
-    Ok(())
-}
-
-#[command]
-#[description("最新50件の譜面情報により譜面データベースを強制的に更新します")]
-async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
-    if owner::is_owner(&ctx, msg.author.id).await == false {
-        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
-        return Ok(());
-    }
-    match handler::check_maps(ctx).await {
-        Ok(_) => {},
-        Err(_e) => {},
     }
 
     Ok(())
