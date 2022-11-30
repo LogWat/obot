@@ -1,3 +1,5 @@
+use std::env;
+
 use serenity::{
     framework::standard::{
         macros::{command},
@@ -67,11 +69,11 @@ async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     };
     let mut map_list = String::new();
     for map in maps {
-        map_list.push_str(&format!("{} - {} [{}]\n", map.artist, map.title, map.star[0]));
+        map_list.push_str(&format!("{}: {} - {} [{}]\n", map.id, map.artist, map.title, map.star[0]));
     }
     msg.channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.title("Ranked mania maps");
+            e.title(&format!("{} mania maps", status));
             e.description(map_list);
             e
         });
@@ -101,14 +103,8 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         }
     };
     let mut map_ids = Vec::new();
-    for id in arg.iter::<String>() {
-        map_ids.push(match id {
-            Ok(i) => i,
-            Err(e) => {
-                msg.channel_id.say(&ctx.http, format!("Invalid id: {}", e)).await?;
-                continue;
-            }
-        });
+    for id in arg.current().unwrap().split_whitespace() {
+        map_ids.push(id.to_string());
     }
     let maps = match api.get_beatmaps_by_ids(&token, map_ids).await {
         Ok(m) => m,
@@ -118,7 +114,8 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         }
     };
     
-    if let Err(e) = api.download_beatmaps(maps, "~/Downloads/").await {
+    let dir = env::var("MAP_DIR").unwrap();
+    if let Err(e) = api.download_beatmaps(maps, &dir).await {
         msg.channel_id.say(&ctx.http, format!("Failed to download beatmaps: {}", e)).await?;
         return Ok(());
     }

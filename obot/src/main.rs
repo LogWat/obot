@@ -47,7 +47,7 @@ struct General;
 #[group]
 #[description("Game commands")]
 #[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
-#[commands(get_maps, update_database)]
+#[commands(get_maps, update_database, dlmaps)]
 struct Game;
 
 #[tokio::main]
@@ -60,7 +60,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
 
-    // database setup
     let database = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(
@@ -89,7 +88,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             match http.get_current_user().await {
                 Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => warn!("Could not access the bot id: {:?}", why),
+                Err(_) => {
+                    error!("Could not access the bot id");
+                    return Ok(());
+                }
             }
         },
         Err(why) => {

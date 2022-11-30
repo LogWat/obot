@@ -90,36 +90,32 @@ impl Api {
         let mut url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
 
         loop {
-            match self.http.get(&url)
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .header("Authorization", format!("Bearer {}", token))
-                .send()
-                .await {
-                    Ok(res) => {
-                        match res.text().await {
-                            Ok(text) => {
-                                let beatmapsets = match text2beatmapsets(&text) {
-                                    Ok((beatmapsets, cursor)) => {
-                                        cursor_string = cursor;
-                                        beatmapsets
-                                    },
-                                    Err(e) => {
-                                        error!("text2beatmapsets error: {}", e);
-                                        continue;
-                                    }
-                                };
-                                bmsets.extend(beatmapsets);
-                                if all_flag {
-                                    url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
-                                } else {
-                                    break;
-                                }
-                            },
-                            Err(e) => return Err(Box::new(e)),
-                        }
-                    }
-                };
+            let text = match self.req_with_token(&token, &url).await {
+                Ok(text) => text,
+                Err(e) => {
+                    error!("Failed to get beatmaps: {}", e);
+                    break;
+                }
+            };
+            let beatmapsets = match text2beatmapsets(&text) {
+                Ok((beatmapsets, cursor)) => {
+                    cursor_string = cursor;
+                    beatmapsets
+                },
+                Err(e) => {
+                    error!("Failed to parse beatmaps: {}", e);
+                    break;
+                }
+            };
+            bmsets.extend(beatmapsets);
+            if all_flag {
+                url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
+            } else {
+                break;
+            }
+            if cursor_string.is_empty() {
+                break;
+            }
         }
 
         Ok(bmsets)
@@ -132,7 +128,7 @@ impl Api {
         ids: Vec<String>,
     ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
         let mut bmsets = Vec::new();
-        for id in ids{
+        for id in ids {
             let url = &format!("{}/api/v2/beatmapsets/{}", self.base_url, id);
             let text = match self.req_with_token(&token, &url).await {
                 Ok(text) => text,
@@ -187,7 +183,7 @@ impl Api {
         &self,
         token: &str,
         url: &str,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<String, Box<dyn Error + Send + Sync>> {
         let res = self.http.get(url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -202,7 +198,8 @@ impl Api {
     async fn download(&self, beatmapset: &Beatmap, path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
         let url = format!("{}/{}?n=1", self.download_base_url, beatmapset.id);
         let res = self.http.get(&url).send().await?;
-        let mut file = File::create(format!("{}/{}.osz", path, beatmapset.id))?;
+        let _ = std::fs::create_dir_all(format!("{}{}", path, beatmapset.status));
+        let mut file = File::create(format!("{}{}/{}-{}.osz", path, beatmapset.status, beatmapset.id, beatmapset.title))?;
         let mut content = std::io::Cursor::new(res.bytes().await?);
         std::io::copy(&mut content, &mut file)?;
         Ok(())
@@ -211,7 +208,16 @@ impl Api {
 
 fn text2beatmapsets(text: &str) -> Result<(Vec<Beatmap>, String), Box<dyn Error>> {
     let json: Value = serde_json::from_str(&text)?;
-    let beatmapsets = json["beatmapsets"].as_array().unwrap();
+    let mut beatmapsets = Vec::new();
+
+    if let Some(_) = json["artist"].as_str() {
+        beatmapsets.push(&json);
+    } else {
+        for beatmapset in json["beatmapsets"].as_array().unwrap() {
+            beatmapsets.push(beatmapset);
+        }
+    }
+
     let beatmapsets = beatmapsets.iter().map(|beatmapset| {
         let title = beatmapset["title"].as_str().unwrap();
         let artist = beatmapset["artist"].as_str().unwrap();
@@ -237,6 +243,9 @@ fn text2beatmapsets(text: &str) -> Result<(Vec<Beatmap>, String), Box<dyn Error>
             star,
         }
     }).collect::<Vec<Beatmap>>();
-    let cursor_string = json["cursor_string"].as_str().unwrap().to_string();
+    let cursor_string = match json["cursor_string"].as_str() {
+        Some(cursor_string) => cursor_string.to_string(),
+        None => "".to_string(),
+    };
     Ok((beatmapsets, cursor_string))
 }

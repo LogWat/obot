@@ -17,13 +17,13 @@ use api::Api;
 pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let now = time::SystemTime::now();
-    info!(format!("check_maps started at {:?}", now));
+    info!("{}", format!("check_maps started at {:?}", now));
 
     let api = Api::new();
     let token = match api.update_token().await {
         Ok(t) => t,
         Err(e) => {
-            println!("Error: {}", e);
+            error!("{}", format!("Failed to update token: {}", e));
             return Ok(());
         }
     };
