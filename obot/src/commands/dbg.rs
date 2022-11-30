@@ -10,20 +10,25 @@ use serenity::{
     prelude::*,
 };
 
-use crate::cache::{Database, SharedManagerContainer};
+use crate::cache::{Database, SharedManagerContainer, CommandCounter};
 use crate::owner;
-use crate::web::{
-    api::{Api}, handler,
-};
 
 #[command]
+#[description("Bot-Processを終了します")]
 async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
-    let manager = data.get::<SharedManagerContainer>().cloned().unwrap();
+    let manager = match data.get::<SharedManagerContainer>().cloned() {
+        Some(manager) => manager,
+        None => {
+            error!("Failed to get manager(shutdown)");
+            return Ok(());
+        }
+    };
     let mut manager = manager.lock().await;
 
     if owner::is_owner(&ctx, msg.author.id).await {
         msg.channel_id.say(&ctx.http, "Shutting down...").await?;
+        info!("Shutting down by {}", msg.author.name);
         manager.shutdown_all().await;
     } else {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
@@ -33,9 +38,13 @@ async fn shutdown(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description("引数分だけコマンドが実行されたチャンネルのメッセージを削除します")]
+#[min_args(1)]
+#[max_args(1)]
 async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        info!("{} tried to use delmsg", msg.author.name);
         return Ok(());
     }
 
@@ -81,6 +90,8 @@ async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 // if arg is "add", add todo, if arg is "list", print todo list, and 
 // if arg is "remove", remove todo from database
 #[command]
+#[description("todoを追加、削除、一覧表示します")]
+#[usage("todo add <todo> | todo remove <todo> | todo list")]
 async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let data = ctx.data.read().await;
     match args.current() {
@@ -151,55 +162,33 @@ async fn todo(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     Ok(())
 }
 
-// test command: get_maps
-// fetch api and print maps
+// dbg command: print CommandCounter
 #[command]
-async fn get_maps(ctx: &Context, msg: &Message) -> CommandResult {
+#[description("コマンドの実行回数を表示します")]
+async fn infoc(ctx: &Context, msg: &Message) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
-            return Ok(());
-        }
-    };
-    let mode = "3"; // mania
-    let status = "ranked";
-    let maps = match api.get_beatmaps(&token, mode, status).await {
-        Ok(m) => m,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
-            return Ok(());
-        }
-    };
-    let mut map_list = String::new();
-    for map in maps {
-        map_list.push_str(&format!("{} - {} [{}]\n", map.artist, map.title, map.star[0]));
+    let data = ctx.data.read().await;
+    let counter = data.get::<CommandCounter>().unwrap();
+    let mut content = String::new();
+    for (key, value) in counter.iter() {
+        content.push_str(&format!("{}: {}\n", key, value));
     }
-    msg.channel_id.send_message(&ctx.http, |m| {
+
+    match msg.channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.title("Ranked mania maps");
-            e.description(map_list);
+            e.title("Command Counter");
+            e.description(content);
             e
         });
         m
-    }).await.expect("Failed to send message");
-    Ok(())
-}
-
-#[command]
-async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
-    if owner::is_owner(&ctx, msg.author.id).await == false {
-        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
-        return Ok(());
-    }
-    match handler::check_maps(ctx).await {
+    }).await {
         Ok(_) => {},
-        Err(_e) => {},
+        Err(e) => {
+            warn!("Failed to send message in infoc: {}", e);
+        }
     }
 
     Ok(())

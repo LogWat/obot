@@ -1,19 +1,19 @@
 mod cache;
 mod owner;
+mod eventhandler;
 mod scheduler;
 mod commands;
 mod web;
 
 use std::{
     env,
-    collections::{HashSet},
+    collections::{HashSet, HashMap},
     sync::{Arc},
     error::Error,
 };
 
 use serenity::{
-    async_trait,
-    model::{gateway::Ready, prelude::*},
+    model::{prelude::*},
     framework::{
         StandardFramework,
         standard::macros::{group},
@@ -23,65 +23,43 @@ use serenity::{
 };
 
 use cache::*;
+use eventhandler::*;
 use crate::commands::{
-    dbg::*, help::*,
+    dbg::*, help::*, game::*,
 };
+
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 
 #[group]
 #[description("Owner commands")]
-#[summary("Owner")]
-#[commands(shutdown, delmsg, get_maps, update_database)]
+#[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
+#[commands(shutdown, delmsg, infoc)]
 struct Owner;
 
 #[group]
 #[description("General commands")]
-#[summary("General")]
+#[summary("一般ユーザーが実行できるコマンドです")]
 #[commands(todo)]
 struct General;
 
-struct Handler;
-#[async_trait]
-impl EventHandler for Handler {
-    // This is called when the bot starts up.
-    async fn ready(&self, ctx: Context, ready: Ready) {
-        let log_channel_id: ChannelId = env::var("DISCORD_LOG_CHANNEL_ID")
-            .expect("DISCORD_LOG_CHANNEL_ID must be set")
-            .parse()
-            .expect("DISCORD_LOG_CHANNEL_ID must be a valid channel ID");
-        log_channel_id.send_message(&ctx.http, |m| {
-            m.embed(|e| {
-                e.title("Bot started")
-                    .description(format!("{} is now online!", ready.user.name))
-                    .color(0x00ffff)
-            })
-        }).await.expect("Failed to send message");
-
-        // Start the scheduler
-        let ctx_clone = Arc::new(ctx);
-        let _ = scheduler::ascheduler(ctx_clone).await;
-    }
-
-    async fn message(&self, ctx: Context, msg: Message) {
-        let self_id = ctx.http.get_current_user().await.unwrap().id;
-        for mention in msg.mentions.iter() {
-            if mention.id == self_id {
-                msg.channel_id.say(&ctx.http, format!("Hello, {}!", msg.author.name))
-                    .await
-                    .expect("Failed to send message");
-            }
-        }
-    }
-}
+#[group]
+#[description("Game commands")]
+#[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
+#[commands(get_maps, update_database, dlmaps)]
+struct Game;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     if let Err(e) = dotenv::dotenv() {
-        println!("Failed to load .env file: {}", e);
+        warn!("Failed to load .env file: {}", e);
     }
+
+    pretty_env_logger::init();
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN must be set");
 
-    // database setup
     let database = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(
@@ -110,10 +88,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             match http.get_current_user().await {
                 Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => panic!("Could not access the bot id: {:?}", why),
+                Err(_) => {
+                    error!("Could not access the bot id");
+                    return Ok(());
+                }
             }
         },
-        Err(why) => panic!("Could not access application info: {:?}", why),
+        Err(why) => {
+            warn!("Could not access application info: {:?}", why);
+            (HashSet::new(), UserId(0))
+        }
     };
 
     let framework = StandardFramework::new()
@@ -124,7 +108,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .help(&MY_HELP)
         .group(&OWNER_GROUP)
-        .group(&GENERAL_GROUP);
+        .group(&GENERAL_GROUP)
+        .group(&GAME_GROUP);
 
     // gatewayを通してどのデータにbotがアクセスできるようにするかを指定する
     // https://docs.rs/serenity/latest/serenity/model/gateway/struct.GatewayIntents.html
@@ -139,6 +124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
+        .type_map_insert::<CommandCounter>(HashMap::default())
         .await
         .expect("Error creating client");
 
@@ -158,7 +144,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+        error!("Client error: {:?}", why);
     }
 
     Ok(())
