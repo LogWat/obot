@@ -103,8 +103,9 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         }
     };
     let mut map_ids = Vec::new();
-    for id in arg.current().unwrap().split_whitespace() {
-        map_ids.push(id.to_string());
+    let mut marg = arg.clone();
+    while let Ok(id) = marg.single::<String>() {
+        map_ids.push(id);
     }
     let maps = match api.get_beatmaps_by_ids(&token, map_ids).await {
         Ok(m) => m,

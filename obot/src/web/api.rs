@@ -125,7 +125,7 @@ impl Api {
     pub async fn get_beatmaps_by_ids(
         &self, 
         token: &str,
-        ids: Vec<String>,
+        ids: Vec<String>
     ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
         let mut bmsets = Vec::new();
         for id in ids {
