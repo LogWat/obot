@@ -1,5 +1,6 @@
 import requests
 import dotenv
+import time
 
 dotenv.load_dotenv()
 api_key = dotenv.get_key(dotenv.find_dotenv(), "API_SECRET")
@@ -10,6 +11,7 @@ download_base = dotenv.get_key(dotenv.find_dotenv(), "DOWNLOAD_BASE")
 ranked_api = api_base + "/api/v2/beatmapsets/search?m=3&q=key%3D4&s=ranked&nsfw="
 loved_api = api_base + "/api/v2/beatmapsets/search?m=3&q=key%3D4&s=loved&nsfw="
 qualified_api = api_base + "/api/v2/beatmapsets/search?m=3&q=key%3D4&s=qualified&nsfw="
+graveyard_api = api_base + "/api/v2/beatmapsets/search?m=3&q=key%3D4&s=graveyard&nsfw="
 
 def get_beatmapsets(api, token):
     cursor_string = ""
@@ -26,7 +28,27 @@ def get_beatmapsets(api, token):
         if data["cursor_string"] is None:
             break
         cursor_string = "&cursor_string={}".format(data["cursor_string"])
-        print(counter)
+        time.sleep(5)
+    return counter
+
+
+def write_beatmapsets(api, token, filename):
+    cursor_string = ""
+    counter = 0
+    with open(filename, "w") as f:
+        while True:
+            r = requests.get(api + cursor_string, headers={"Authorization": "Bearer " + token})
+            if r.status_code != 200:
+                print("Error: {}".format(r.status_code))
+                return
+            data = r.json()
+            for beatmaps in data["beatmapsets"]:
+                counter += 1
+                f.write("{}: {}-{} (by {})\n".format(counter, beatmaps["id"], beatmaps["title"], beatmaps["artist"]))
+            if data["cursor_string"] is None:
+                break
+            cursor_string = "&cursor_string={}".format(data["cursor_string"])
+            time.sleep(5)
     return counter
 
 token = requests.post(api_base + "/oauth/token",
@@ -49,4 +71,5 @@ def download(beatmapsets_id, filename):
     print("Downloaded {}".format(filename))
 
 
-_ = get_beatmapsets(loved_api, token)
+# _ = get_beatmapsets(graveyard_api, token)
+_ = write_beatmapsets(graveyard_api, token, "graveyard.txt")
