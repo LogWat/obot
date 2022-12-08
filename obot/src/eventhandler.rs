@@ -43,20 +43,21 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
+        if msg.is_own(&ctx.cache) || msg.author.bot {
+            return;
+        }
         let self_id = ctx.http.get_current_user().await.unwrap().id;
         for mention in msg.mentions.iter() {
             if mention.id == self_id {
-                match msg.channel_id.say(&ctx.http, format!("Hello, {}!", msg.author.name)).await {
-                    Ok(_) => info!("Sent hello message to {}", msg.author.name),
-                    Err(e) => error!("Failed to send hello message to {}: {}", msg.author.name, e),
-                }
+                let content = &msg.content;
+                println!("{}: {}", msg.author.name, content);
             }
         }
     }
 }
 
 #[hook]
-async fn unknown_command(ctx: &Context, msg: &Message, unknown_command_name: &str) {
+pub async fn unknown_command(ctx: &Context, msg: &Message, unknown_command_name: &str) {
     match msg.channel_id.say(&ctx.http, format!("Unknown command: '{}'. Try `/help`", unknown_command_name))
         .await {
         Ok(_) => info!("Sent unknown command message to {}", msg.author.name),

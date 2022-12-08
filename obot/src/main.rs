@@ -106,6 +106,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .prefix("/")
             .on_mention(Some(bot_id))
         )
+        .unrecognised_command(unknown_command)
         .help(&MY_HELP)
         .group(&OWNER_GROUP)
         .group(&GENERAL_GROUP)
