@@ -50,6 +50,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
         }
 
         let mut new_maps = Vec::new();
+        let mut download_maps = Vec::new();
         for map in maps {
             if map_ids.contains(&(map.id as i64)) == false {
                 sqlx::query!("INSERT INTO beatmapsets (id, title, artist, stat) VALUES (?, ?, ?, ?)",
@@ -57,15 +58,58 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                     .execute(&*db)
                     .await?;
                 new_maps.push(map);
+                // download only ranked and loved maps
+                if status == &"ranked" || status == &"loved" {
+                    download_maps.push(map);
+                }
             }
         }
 
         if new_maps.len() > 0 {
             let mut map_list = String::new();
+            map_list.push_str(&format!("```ansi\n"));
             for map in new_maps {
-                map_list.push_str(&format!("{} (by {}) - {} [{} ~ {}]\n",
-                map.id, map.artist, map.title, map.star[0], map.star[map.star.len() - 1]));
+
+                // def star string
+                let mut max_star = 0.0;
+                let mut min_star = 1000.0;
+                for s in map.star {
+                    if s > max_star {
+                        max_star = s;
+                    }
+                    if s < min_star {
+                        min_star = s;
+                    }
+                }
+                let mut max_star_color = String::new();
+                match max_star {
+                    0.0..=1.75 => max_star_color = String::from("\u001b[0;36m"),
+                    1.76..=2.75 => max_star_color = String::from("\u001b[0;32m"),
+                    2.76..=3.75 => max_star_color = String::from("\u001b[0;33m"),
+                    3.76..=4.75 => max_star_color = String::from("\u001b[0;31m"),
+                    4.76..=6.00 => max_star_color = String::from("\u001b[0;35m"),
+                    _ => max_star_color = String::from("\u001b[0;30;45m"),
+                }
+                let mut min_star_color = String::new();
+                match min_star {
+                    0.0..=1.75 => min_star_color = String::from("\u001b[0;36m"),
+                    1.76..=2.75 => min_star_color = String::from("\u001b[0;32m"),
+                    2.76..=3.75 => min_star_color = String::from("\u001b[0;33m"),
+                    3.76..=4.75 => min_star_color = String::from("\u001b[0;31m"),
+                    4.76..=6.00 => min_star_color = String::from("\u001b[0;35m"),
+                    _ => min_star_color = String::from("\u001b[0;30;45m"),
+                }
+                let mut star_string = String::new();
+                if max_star == min_star {
+                    star_string = format!("{}{}★\u001b[0m", max_star_color, max_star);
+                } else {
+                    star_string = format!("{}{}★\u001b[0m~{}{}★\u001b[0m", min_star_color, min_star, max_star_color, max_star);
+                }
+
+                map_list.push_str(&format!("[{}] \u001b[1m{}\u001b[0m (by {}) {}\n",
+                    map.id, map.title, map.artist, star_string));
             }
+            map_list.push_str(&format!("```"));
             let channel_id: ChannelId = env::var("DISCORD_MAP_CHANNEL_ID").unwrap().parse().unwrap();
             let color = match status {
                 &"ranked" => 0x00ff00,
@@ -82,7 +126,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                 m
             }).await?;
         } else {
-            println!("No new {} maps", status);
+            info!("{}", format!("No new {} maps", status));
         }
 
     }
