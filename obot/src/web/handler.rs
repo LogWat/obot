@@ -33,6 +33,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
 
     let statuses = ["ranked", "loved", "qualified"];
     let mode = "3"; // mania only
+    let mut download_maps = Vec::new();
     for status in statuses.iter() {
         let maps = match api.get_beatmaps(&token, mode, status, false).await {
             Ok(m) => m,
@@ -56,16 +57,68 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                  map.id, map.title, map.artist, status)
                     .execute(&*db)
                     .await?;
-                new_maps.push(map);
+                new_maps.push(map.clone());
+                // download only ranked and loved maps
+                if status == &"ranked" || status == &"loved" {
+                    download_maps.push(map.clone());
+                }
             }
         }
 
         if new_maps.len() > 0 {
             let mut map_list = String::new();
+            map_list.push_str(&format!("```ansi\n"));
             for map in new_maps {
-                map_list.push_str(&format!("{} (by {}) - {} [{} ~ {}]\n",
-                map.id, map.artist, map.title, map.star[0], map.star[map.star.len() - 1]));
+                // def star string
+                let mut max_star = 0.0;
+                let mut min_star = 1000.0;
+                for s in map.star {
+                    if s > max_star {
+                        max_star = s;
+                    }
+                    if s < min_star {
+                        min_star = s;
+                    }
+                }
+                let mut mxsc = String::new();
+                // floatのmatchはできないのでifで
+                if max_star >= 0.0 && max_star <= 1.75 {
+                    mxsc = String::from("[0;36m");
+                } else if max_star >= 1.76 && max_star <= 3.5 {
+                    mxsc = String::from("[0;32m");
+                } else if max_star >= 2.51 && max_star <= 4.5 {
+                    mxsc = String::from("[0;33m");
+                } else if max_star >= 4.51 && max_star <= 5.5 {
+                    mxsc = String::from("[0;31m");
+                } else if max_star >= 5.51 && max_star <= 6.0 {
+                    mxsc = String::from("[0;35m");
+                } else {
+                    mxsc = String::from("[0;30;45m");
+                }
+
+                let mut mnsc = String::new();
+                if min_star >= 0.0 && min_star <= 1.75 {
+                    mnsc = String::from("[0;36m");
+                } else if min_star >= 1.76 && min_star <= 3.5 {
+                    mnsc = String::from("[0;32m");
+                } else if min_star >= 2.51 && min_star <= 4.5 {
+                    mnsc = String::from("[0;33m");
+                } else if min_star >= 4.51 && min_star <= 5.5 {
+                    mnsc = String::from("[0;31m");
+                } else if min_star >= 5.51 && min_star <= 6.0 {
+                    mnsc = String::from("[0;35m");
+                } else {
+                    mnsc = String::from("[0;30;45m");
+                }
+
+                map_list.push_str(&format!("[{}] [1m{}[0m (by {}) ",map.id, map.title, map.artist));
+                if max_star == min_star {
+                    map_list.push_str(&format!("{}{}★[0m\n", mxsc, max_star));
+                } else {
+                    map_list.push_str(&format!("{}{}★[0m~{}{}★[0m\n", mnsc, min_star, mxsc, max_star));
+                }
             }
+            map_list.push_str(&format!("```"));
             let channel_id: ChannelId = env::var("DISCORD_MAP_CHANNEL_ID").unwrap().parse().unwrap();
             let color = match status {
                 &"ranked" => 0x00ff00,
@@ -82,9 +135,16 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                 m
             }).await?;
         } else {
-            println!("No new {} maps", status);
+            info!("{}", format!("No new {} maps", status));
         }
-
     }
+
+    // download maps
+    let path = env::var("MAP_PATH").unwrap();
+    match api.download_beatmaps(download_maps, &path).await {
+        Ok(_) => info!("{}", format!("Downloaded maps")),
+        Err(e) => error!("{}", format!("Failed to download maps: {}", e)),
+    }
+
     Ok(())
 }
