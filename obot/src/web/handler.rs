@@ -33,6 +33,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
 
     let statuses = ["ranked", "loved", "qualified"];
     let mode = "3"; // mania only
+    let mut download_maps = Vec::new();
     for status in statuses.iter() {
         let maps = match api.get_beatmaps(&token, mode, status, false).await {
             Ok(m) => m,
@@ -50,7 +51,6 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
         }
 
         let mut new_maps = Vec::new();
-        let mut download_maps = Vec::new();
         for map in maps {
             if map_ids.contains(&(map.id as i64)) == false {
                 sqlx::query!("INSERT INTO beatmapsets (id, title, artist, stat) VALUES (?, ?, ?, ?)",
@@ -137,7 +137,14 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
         } else {
             info!("{}", format!("No new {} maps", status));
         }
-
     }
+
+    // download maps
+    let path = env::var("MAP_PATH").unwrap();
+    match api.download_beatmaps(download_maps, &path).await {
+        Ok(_) => info!("{}", format!("Downloaded maps")),
+        Err(e) => error!("{}", format!("Failed to download maps: {}", e)),
+    }
+
     Ok(())
 }
