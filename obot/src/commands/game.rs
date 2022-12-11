@@ -115,7 +115,7 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         }
     };
     
-    let dir = env::var("MAP_DIR").unwrap();
+    let dir = env::var("MAP_PATH").unwrap();
     if let Err(e) = api.download_beatmaps(maps, &dir).await {
         msg.channel_id.say(&ctx.http, format!("Failed to download beatmaps: {}", e)).await?;
         return Ok(());
