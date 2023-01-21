@@ -195,27 +195,3 @@ async fn infoc(ctx: &Context, msg: &Message) -> CommandResult {
 
     Ok(())
 }
-
-// dbg command: embed test
-#[command]
-#[description("embedの確認用コマンドです")]
-async fn tembed(ctx: &Context, msg: &Message) -> CommandResult {
-    if owner::is_owner(&ctx, msg.author.id).await == false {
-        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
-        return Ok(());
-    }
-
-    match msg.channel_id.send_message(&ctx.http, |m| {
-        m.embed(|e| {
-            e.title("Embed Test")
-        });
-        m
-    }).await {
-        Ok(_) => {},
-        Err(e) => {
-            warn!("Failed to send message in infoc: {}", e);
-        }
-    }
-
-    Ok(())
-}

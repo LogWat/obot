@@ -16,7 +16,9 @@ use serenity::{
     model::{prelude::*},
     framework::{
         StandardFramework,
-        standard::macros::{group},
+        standard::{
+            macros::{group},
+        },
     },
     http::Http,
     prelude::*,
@@ -35,7 +37,7 @@ extern crate log;
 #[group]
 #[description("Owner commands")]
 #[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
-#[commands(shutdown, delmsg, infoc, tembed)]
+#[commands(shutdown, delmsg, infoc)]
 struct Owner;
 
 #[group]
