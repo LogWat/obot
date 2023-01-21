@@ -83,11 +83,13 @@ impl Api {
         token: &str,
         mode: &str,
         status: &str,
+        key: &str,
         all_flag: bool,
     ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
         let mut bmsets = Vec::new();
         let mut cursor_string = String::new();
-        let mut url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
+        let mut url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D{}&nsfw=&cursor_string={}",
+        self.base_url, mode, status, key, cursor_string);
 
         loop {
             let text = match self.req_with_token(&token, &url).await {

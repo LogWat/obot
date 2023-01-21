@@ -14,6 +14,7 @@ use api::Api;
 
 // check ranked, loved, qualified beatmaps (50maps)
 // if there is a new map, post it to discord (using sqlx)
+// TODO: データベースに存在してるかどうかは上50件のみで判定するようにする
 pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let now = time::SystemTime::now();
@@ -126,6 +127,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                 &"qualified" => 0xffff00,
                 _ => 0x000000,
             };
+            /*
             channel_id.send_message(&ctx.http, |m| {
                 m.embed(|e| {
                     e.title(format!("New {} maps", status))
@@ -134,6 +136,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
                 });
                 m
             }).await?;
+            */
         } else {
             info!("{}", format!("No new {} maps", status));
         }

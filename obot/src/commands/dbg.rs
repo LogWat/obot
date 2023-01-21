@@ -207,7 +207,7 @@ async fn tembed(ctx: &Context, msg: &Message) -> CommandResult {
 
     match msg.channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.title("Embed Test");
+            e.title("Embed Test")
         });
         m
     }).await {

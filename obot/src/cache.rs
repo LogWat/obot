@@ -34,3 +34,9 @@ pub struct Database;
 impl TypeMapKey for Database {
     type Value = Arc<Mutex<sqlx::SqlitePool>>;
 }
+
+// 環境変数を記録する
+pub struct Env;
+impl TypeMapKey for Env {
+    type Value = Arc<Mutex<HashMap<String, String>>>; // {name: value}
+}
