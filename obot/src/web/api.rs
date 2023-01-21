@@ -15,7 +15,11 @@ pub struct Beatmap {
     pub title: String,
     pub artist: String,
     pub creator: String,
+    pub url: String,
     pub cover_url: String,
+    pub card_url: String,
+    pub mp3_url: String,
+    pub download_url: String,
     pub id: u32, // 再検索時に必要
     pub favourite_count: u32,
     pub mode: String,
@@ -99,7 +103,7 @@ impl Api {
                     break;
                 }
             };
-            let beatmapsets = match text2beatmapsets(&text) {
+            let beatmapsets = match self.text2beatmapsets(&text) {
                 Ok((beatmapsets, cursor)) => {
                     cursor_string = cursor;
                     beatmapsets
@@ -139,7 +143,7 @@ impl Api {
                     continue;
                 }
             };
-            let beatmapsets = match text2beatmapsets(&text) {
+            let beatmapsets = match self.text2beatmapsets(&text) {
                 Ok((beatmapsets, _)) => beatmapsets,
                 Err(e) => {
                     error!("text2beatmapsets error: {}", e);
@@ -206,48 +210,62 @@ impl Api {
         std::io::copy(&mut content, &mut file)?;
         Ok(())
     }
-}
 
-fn text2beatmapsets(text: &str) -> Result<(Vec<Beatmap>, String), Box<dyn Error>> {
-    let json: Value = serde_json::from_str(&text)?;
-    let mut beatmapsets = Vec::new();
-
-    if let Some(_) = json["artist"].as_str() {
-        beatmapsets.push(&json);
-    } else {
-        for beatmapset in json["beatmapsets"].as_array().unwrap() {
-            beatmapsets.push(beatmapset);
+    fn text2beatmapsets(&self, text: &str) -> Result<(Vec<Beatmap>, String), Box<dyn Error>> {
+        let json: Value = serde_json::from_str(&text)?;
+        let mut beatmapsets = Vec::new();
+    
+        if let Some(_) = json["artist"].as_str() {
+            beatmapsets.push(&json);
+        } else {
+            for beatmapset in json["beatmapsets"].as_array().unwrap() {
+                beatmapsets.push(beatmapset);
+            }
         }
+    
+        let beatmapsets = beatmapsets.iter().map(|beatmapset| {
+            let title = beatmapset["title"].as_str().unwrap();
+            let artist = beatmapset["artist"].as_str().unwrap();
+            let creator = beatmapset["creator"].as_str().unwrap();
+            let url = format!("{}/beatmapsets/{}", self.base_url, beatmapset["id"].as_u64().unwrap());
+            let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
+            let card_url = beatmapset["covers"]["card@2x"].as_str().unwrap();
+            let mp3_url = format!("https:{}",
+                beatmapset["preview_url"].as_str().unwrap()
+            );
+            let download_url = format!("{}/beatmapsets/{}/download",
+                self.base_url,
+                beatmapset["id"].as_u64().unwrap(),
+            );
+            let id = beatmapset["id"].as_u64().unwrap();
+            let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
+            let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
+            let mode = beatmaps[0]["mode"].as_str().unwrap();
+            let status = beatmaps[0]["status"].as_str().unwrap();
+            let star = beatmaps.iter().map(|beatmap| {
+                beatmap["difficulty_rating"].as_f64().unwrap() as f32
+            }).collect::<Vec<f32>>();
+            Beatmap {
+                title: title.to_string(),
+                artist: artist.to_string(),
+                creator: creator.to_string(),
+                url: url.to_string(),
+                cover_url: cover_url.to_string(),
+                card_url: card_url.to_string(),
+                mp3_url,
+                download_url,
+                id: id as u32,
+                favourite_count: favourite_count as u32,
+                mode: mode.to_string(),
+                status: status.to_string(),
+                star,
+            }
+        }).collect::<Vec<Beatmap>>();
+        let cursor_string = match json["cursor_string"].as_str() {
+            Some(cursor_string) => cursor_string.to_string(),
+            None => "".to_string(),
+        };
+        Ok((beatmapsets, cursor_string))
     }
 
-    let beatmapsets = beatmapsets.iter().map(|beatmapset| {
-        let title = beatmapset["title"].as_str().unwrap();
-        let artist = beatmapset["artist"].as_str().unwrap();
-        let creator = beatmapset["creator"].as_str().unwrap();
-        let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
-        let id = beatmapset["id"].as_u64().unwrap();
-        let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
-        let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
-        let mode = beatmaps[0]["mode"].as_str().unwrap();
-        let status = beatmaps[0]["status"].as_str().unwrap();
-        let star = beatmaps.iter().map(|beatmap| {
-            beatmap["difficulty_rating"].as_f64().unwrap() as f32
-        }).collect::<Vec<f32>>();
-        Beatmap {
-            title: title.to_string(),
-            artist: artist.to_string(),
-            creator: creator.to_string(),
-            cover_url: cover_url.to_string(),
-            id: id as u32,
-            favourite_count: favourite_count as u32,
-            mode: mode.to_string(),
-            status: status.to_string(),
-            star,
-        }
-    }).collect::<Vec<Beatmap>>();
-    let cursor_string = match json["cursor_string"].as_str() {
-        Some(cursor_string) => cursor_string.to_string(),
-        None => "".to_string(),
-    };
-    Ok((beatmapsets, cursor_string))
 }

@@ -60,7 +60,7 @@ async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         _ => "ranked",
     };
 
-    let maps = match api.get_beatmaps(&token, mode, status, false).await {
+    let maps = match api.get_beatmaps(&token, mode, status, "4", false).await {
         Ok(m) => m,
         Err(e) => {
             msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
@@ -122,5 +122,55 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     }
 
     msg.channel_id.say(&ctx.http, "Downloaded beatmaps").await?;
+    Ok(())
+}
+
+// test command: mapset_info
+// fetch api and print mapset info
+#[command]
+#[description("指定されたidの譜面情報を表示します (最大10件)")]
+#[max_args(10)]
+#[min_args(1)]
+#[usage("mapset_info [mapset id]")]
+async fn mapset_info(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+
+    let api = Api::new();
+    let token = match api.update_token().await {
+        Ok(t) => t,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
+            return Ok(());
+        }
+    };
+
+    let mut mapset_ids = Vec::new();
+    let mut marg = arg.clone();
+    while let Ok(id) = marg.single::<String>() {
+        mapset_ids.push(id);
+    }
+
+    let mapset = match api.get_beatmaps_by_ids(&token, mapset_ids).await {
+        Ok(m) => m,
+        Err(_e) => {
+            msg.channel_id.say(&ctx.http, format!("Failed to get mapset!\n Please inform the owner")).await?;
+            return Ok(());
+        }
+    };
+
+    // 1件ずつembedで表示
+    for map in mapset {
+        match handler::send_beatmap(&ctx, &map, &msg.channel_id).await {
+            Ok(_) => (),
+            Err(e) => {
+                error!("Failed to send beatmap: {}", e);
+                continue;
+            }
+        }
+    }
+
     Ok(())
 }
