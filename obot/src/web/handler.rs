@@ -2,11 +2,13 @@ use std::{
     env,
     error::Error,
     time,
+    collections::HashMap,
 };
 use serenity::{
     model::{prelude::*},
     prelude::*,
 };
+use itertools::Itertools;
 
 use crate::cache::Database;
 use crate::web::api;
@@ -16,26 +18,24 @@ use super::api::Beatmap;
 
 // Beatmap構造体からいい感じにEmbed Messageを送る
 pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &ChannelId) -> Result<(), Box<dyn Error>> {
-    let color = match beatmapset.status.as_str() {
-        "ranked" => 0x00ff00,
-        "loved" => 0xff00ff,
-        "qualified" => 0xffff00,
-        _ => 0x000000,
+    let (color, title_str) = match beatmapset.status.as_str() {
+        "ranked" => (0x00ff00, "Ranked"),
+        "loved" => (0xff00ff, "Loved"),
+        "qualified" => (0xffff00, "Qualified"),
+        _ => (0xeeeeee, "Graveyard"),
     };
 
-    let star_str = star_string(&beatmapset.star);
+    let star_str = star_string(&beatmapset.star, &beatmapset.key);
     
     match channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.title(&beatmapset.title)
+            e.title(&format!("[{}] {} ({})", beatmapset.id, beatmapset.title, title_str))
                 .color(color)
                 .image(&beatmapset.card_url)
                 .url(&beatmapset.url)
                 .field("Artist", &beatmapset.artist, true)
                 .field("Creator", &beatmapset.creator, true)
-                .field("Download", &beatmapset.download_url, false)
                 .field("Star :star:", &star_str, false)
-                .field("Preview", &beatmapset.mp3_url, false)
         });
         m
     }).await {
@@ -46,57 +46,60 @@ pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &Chan
 
 
 // starから色付き文字列を返す
-pub fn star_string(star: &Vec<f32>) -> String {
-    let mut max_star = -1.0;
-    let mut min_star = 1000.0;
-    for s in star {
-        if s > &max_star {
-            max_star = *s;
-        }
-        if s < &min_star {
-            min_star = *s;
+// キー数ごとに難易度を表示
+pub fn star_string(star: &Vec<f32>, keys: &Vec<String>) -> String {
+    let mut key: HashMap<&String, Vec<f32>> = HashMap::new();
+    for (k, s) in keys.iter().zip(star.iter()) {
+        key.entry(k).or_insert(Vec::new()).push(*s);
+    }
+
+    let mut star_str = String::new();
+    star_str.push_str("```ansi\n");
+
+    for k in key.keys().sorted() {
+        let stars = key.get(k).unwrap();
+        let max_star = stars.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+        let min_star = stars.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+        let mxsc = if *max_star >= 0.0 && *max_star <= 1.75 {
+            String::from("[0;36m")
+        } else if *max_star >= 1.76 && *max_star <= 3.5 {
+            String::from("[0;32m")
+        } else if *max_star >= 2.51 && *max_star <= 4.5 {
+            String::from("[0;33m")
+        } else if *max_star >= 4.51 && *max_star <= 5.5 {
+            String::from("[0;31m")
+        } else if *max_star >= 5.51 && *max_star <= 6.0 {
+            String::from("[0;35m")
+        } else {
+            String::from("[0;30;45m")
+        };
+    
+        let mnsc = if *min_star >= 0.0 && *min_star <= 1.75 {
+            String::from("[0;36m")
+        } else if *min_star >= 1.76 && *min_star <= 3.5 {
+            String::from("[0;32m")
+        } else if *min_star >= 2.51 && *min_star <= 4.5 {
+            String::from("[0;33m")
+        } else if *min_star >= 4.51 && *min_star <= 5.5 {
+            String::from("[0;31m")
+        } else if *min_star >= 5.51 && *min_star <= 6.0 {
+            String::from("[0;35m")
+        } else {
+            String::from("[0;30;45m")
+        };
+
+        star_str.push_str(&format!("{}k: ", k));
+
+        if max_star == min_star {
+            star_str.push_str(&format!("{}{}[0m", mxsc, max_star));
+        } else {
+            star_str.push_str(&format!("{}{}[0m ~ {}{}[0m\n", mnsc, min_star, mxsc, max_star));
         }
     }
 
-    let mxsc = if max_star >= 0.0 && max_star <= 1.75 {
-        String::from("[0;36m")
-    } else if max_star >= 1.76 && max_star <= 3.5 {
-        String::from("[0;32m")
-    } else if max_star >= 2.51 && max_star <= 4.5 {
-        String::from("[0;33m")
-    } else if max_star >= 4.51 && max_star <= 5.5 {
-        String::from("[0;31m")
-    } else if max_star >= 5.51 && max_star <= 6.0 {
-        String::from("[0;35m")
-    } else {
-        String::from("[0;30;45m")
-    };
 
-    let mnsc = if min_star >= 0.0 && min_star <= 1.75 {
-        String::from("[0;36m")
-    } else if min_star >= 1.76 && min_star <= 3.5 {
-        String::from("[0;32m")
-    } else if min_star >= 2.51 && min_star <= 4.5 {
-        String::from("[0;33m")
-    } else if min_star >= 4.51 && min_star <= 5.5 {
-        String::from("[0;31m")
-    } else if min_star >= 5.51 && min_star <= 6.0 {
-        String::from("[0;35m")
-    } else {
-        String::from("[0;30;45m")
-    };
-
-    let mut msg = String::new();
-    msg.push_str(&format!("```ansi\n"));
-
-    if max_star == min_star {
-        msg.push_str(&format!("{}{}[0m", mxsc, max_star));
-    } else {
-        msg.push_str(&format!("{}{}[0m ~ {}{}[0m", mnsc, min_star, mxsc, max_star));
-    }
-
-    msg.push_str(&format!("```"));
-    msg
+    star_str.push_str(&format!("```"));
+    star_str
 }
 
 // check ranked, loved, qualified beatmaps (50maps)
@@ -159,7 +162,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
             for map in new_maps {
 
                 map_list.push_str(&format!("[{}] [1m{}[0m (by {}) ",map.id, map.title, map.artist));
-                map_list.push_str(&format!("{}\n", star_string(&map.star)));
+                map_list.push_str(&format!("{}\n", star_string(&map.star, &map.key)));
             }
             map_list.push_str(&format!("```"));
             let channel_id: ChannelId = env::var("DISCORD_MAP_CHANNEL_ID").unwrap().parse().unwrap();

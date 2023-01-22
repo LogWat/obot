@@ -25,6 +25,7 @@ pub struct Beatmap {
     pub mode: String,
     pub status: String,
     pub star: Vec<f32>,
+    pub key: Vec<String>,
 }
 
 
@@ -245,6 +246,12 @@ impl Api {
             let star = beatmaps.iter().map(|beatmap| {
                 beatmap["difficulty_rating"].as_f64().unwrap() as f32
             }).collect::<Vec<f32>>();
+            let key = beatmaps.iter().map(|beatmap| {
+                beatmap["cs"].as_f64().unwrap() as f32
+            }).collect::<Vec<f32>>();
+            let key = key.iter().map(|k| {
+                format!("{}", k)
+            }).collect::<Vec<String>>();
             Beatmap {
                 title: title.to_string(),
                 artist: artist.to_string(),
@@ -259,6 +266,7 @@ impl Api {
                 mode: mode.to_string(),
                 status: status.to_string(),
                 star,
+                key,
             }
         }).collect::<Vec<Beatmap>>();
         let cursor_string = match json["cursor_string"].as_str() {

@@ -16,6 +16,50 @@ use crate::web::{
     api::{Api}, handler,
 };
 
+// dbg command: init_database
+// initialize database
+#[command]
+#[description("全ての譜面情報により譜面データベースを強制的に更新します")] 
+#[max_args(1)]
+#[min_args(0)]
+#[usage("init_database [status] (default: all status)")]
+async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+
+    let status: Vec<&str> = match arg.single::<String>() {
+        Ok(s) => {
+            match s.as_str() {
+                "ranked" => ["ranked"].to_vec(),
+                "loved" => ["loved"].to_vec(),
+                "qualified" => ["qualified"].to_vec(),
+                "all" => ["ranked", "loved", "qualified"].to_vec(),
+                _ => {
+                    msg.channel_id.say(&ctx.http, "Invalid status: ranked, loved, qualified, all").await?;
+                    return Ok(());
+                }
+            }
+        }
+        Err(_e) => {
+            msg.channel_id.say(&ctx.http, "Failed to parse status").await?;
+            return Ok(());
+        }
+    };
+
+    let api = Api::new();
+    let token = match api.update_token().await {
+        Ok(t) => t,
+        Err(_e) => {
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to update token! Please inform the owner...").await?;
+            return Ok(());
+        }
+    };
+
+    Ok(())
+}
+
 #[command]
 #[description("最新50件の譜面情報により譜面データベースを強制的に更新します")]
 async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
