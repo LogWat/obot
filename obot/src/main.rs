@@ -4,6 +4,7 @@ mod eventhandler;
 mod scheduler;
 mod commands;
 mod web;
+mod db;
 
 use std::{
     env,
