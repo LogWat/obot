@@ -1,5 +1,3 @@
--- if there are multiple difficulties and keys, devide by a space
--- !!! Diffs and keys must be in the same order !!!
 CREATE TABLE IF NOT EXISTS "ranked_beatmapsets" (
     id INTEGER NOT NULL,
     title TEXT NOT NULL,
@@ -7,5 +5,8 @@ CREATE TABLE IF NOT EXISTS "ranked_beatmapsets" (
     creator TEXT NOT NULL,
     stars TEXT NOT NULL,
     keys TEXT NOT NULL,
-    card_url TEXT NOT NULL
+    mp3_url TEXT NOT NULL,
+    card_url TEXT NOT NULL,
+    cursor TEXT NOT NULL,
+    statu TEXT NOT NULL
 )
