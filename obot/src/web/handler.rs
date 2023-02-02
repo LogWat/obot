@@ -18,21 +18,22 @@ use super::api::Beatmap;
 
 // Beatmap構造体からいい感じにEmbed Messageを送る
 pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &ChannelId) -> Result<(), Box<dyn Error>> {
-    let (color, title_str) = match beatmapset.status.as_str() {
+    let (color, title_str) = match beatmapset.statu.as_str() {
         "ranked" => (0x00ff00, "Ranked"),
         "loved" => (0xff00ff, "Loved"),
         "qualified" => (0xffff00, "Qualified"),
         _ => (0xeeeeee, "Graveyard"),
     };
 
-    let star_str = star_string(&beatmapset.star, &beatmapset.key);
-    
+    let star_str = star_string(&beatmapset.stars, &beatmapset.keys);
+    let url = api::get_url(&beatmapset);
+
     match channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
             e.title(&format!("[{}] {} ({})", beatmapset.id, beatmapset.title, title_str))
                 .color(color)
                 .image(&beatmapset.card_url)
-                .url(&beatmapset.url)
+                .url(&url)
                 .field("Artist", &beatmapset.artist, true)
                 .field("Creator", &beatmapset.creator, true)
                 .field("Star :star:", &star_str, false)
@@ -47,7 +48,10 @@ pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &Chan
 
 // starから色付き文字列を返す
 // キー数ごとに難易度を表示
-pub fn star_string(star: &Vec<f32>, keys: &Vec<String>) -> String {
+pub fn star_string(star: &str, keys: &str) -> String {
+    let star = star_to_vec(&star);
+    let keys = keys_to_vec(&keys);
+
     let mut key: HashMap<&String, Vec<f32>> = HashMap::new();
     for (k, s) in keys.iter().zip(star.iter()) {
         key.entry(k).or_insert(Vec::new()).push(*s);
@@ -100,6 +104,22 @@ pub fn star_string(star: &Vec<f32>, keys: &Vec<String>) -> String {
 
     star_str.push_str(&format!("```"));
     star_str
+}
+
+pub fn keys_to_vec(keys: &str) -> Vec<String> {
+    let mut key_vec = Vec::new();
+    for k in keys.split(',') {
+        key_vec.push(k.to_string());
+    }
+    key_vec
+}
+
+pub fn star_to_vec(star: &str) -> Vec<f32> {
+    let mut star_vec = Vec::new();
+    for s in star.split(',') {
+        star_vec.push(s.parse::<f32>().unwrap());
+    }
+    star_vec
 }
 
 // check ranked, loved, qualified beatmaps (50maps)
@@ -162,7 +182,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
             for map in new_maps {
 
                 map_list.push_str(&format!("[{}] [1m{}[0m (by {}) ",map.id, map.title, map.artist));
-                map_list.push_str(&format!("{}\n", star_string(&map.star, &map.key)));
+                map_list.push_str(&format!("{}\n", star_string(&map.stars, &map.keys)));
             }
             map_list.push_str(&format!("```"));
             let channel_id: ChannelId = env::var("DISCORD_MAP_CHANNEL_ID").unwrap().parse().unwrap();

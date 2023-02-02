@@ -12,20 +12,16 @@ use serde_json::{Value};
 
 #[derive(Debug, Clone)]
 pub struct Beatmap {
+    pub id: i64, // 再検索時に必要
     pub title: String,
     pub artist: String,
     pub creator: String,
-    pub url: String,
-    pub cover_url: String,
-    pub card_url: String,
+    pub stars: String, // ","で区切って文字列にして保存
+    pub keys: String,  // starと同じ(順番は揃えること！)
     pub mp3_url: String,
-    pub download_url: String,
-    pub id: u32, // 再検索時に必要
-    pub favourite_count: u32,
-    pub mode: String,
-    pub status: String,
-    pub star: Vec<f32>,
-    pub key: Vec<String>,
+    pub card_url: String,
+    pub cursor: String,
+    pub statu: String, // db的には不要
 }
 
 
@@ -36,6 +32,11 @@ pub struct Api {
     pub secret: String,
     pub base_url: String,
     pub download_base_url: String,
+}
+
+pub fn get_url(beatmap: &Beatmap) -> String {
+    let base_url = env::var("API_BASE").expect("API_BASE must be set");
+    format!("{}/beatmapsets/{}", base_url, beatmap.id)
 }
 
 impl Api {
@@ -81,6 +82,28 @@ impl Api {
             };
 
         token
+    }
+
+    pub async fn get_beatmapsets_with_cursor(
+        &self,
+        token: &str,
+        mode: &str, // mania: 3
+        status: &str, // ranked, loved, qualified, pending, graveyard
+        key: &str, // 4, 7...
+        cursor_string: &str,
+    ) -> Result<(Vec<Beatmap>, String), Box<dyn Error + Send + Sync>> {
+        let url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D{}&nsfw=&cursor_string={}",
+        self.base_url, mode, status, key, cursor_string);
+        let text = match self.req_with_token(&token, &url).await {
+            Ok(text) => text,
+            Err(e) => return Err(e),
+        };
+        let beatmapsets = match self.text2beatmapsets(&text) {
+            Ok((beatmapsets, cursor)) => (beatmapsets, cursor),
+            Err(e) => return Err(e.to_string().into()),
+        };
+
+        Ok(beatmapsets)
     }
 
     pub async fn get_beatmaps(
@@ -205,8 +228,8 @@ impl Api {
     async fn download(&self, beatmapset: &Beatmap, path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
         let url = format!("{}/{}?n=1", self.download_base_url, beatmapset.id);
         let res = self.http.get(&url).send().await?;
-        let _ = std::fs::create_dir_all(format!("{}{}", path, beatmapset.status));
-        let mut file = File::create(format!("{}{}/{}-{}.osz", path, beatmapset.status, beatmapset.id, beatmapset.title))?;
+        let _ = std::fs::create_dir_all(format!("{}{}", path, beatmapset.statu));
+        let mut file = File::create(format!("{}{}/{}-{}.osz", path, beatmapset.statu, beatmapset.id, beatmapset.title))?;
         let mut content = std::io::Cursor::new(res.bytes().await?);
         std::io::copy(&mut content, &mut file)?;
         Ok(())
@@ -223,25 +246,23 @@ impl Api {
                 beatmapsets.push(beatmapset);
             }
         }
+
+        let cursor_string = match json["cursor_string"].as_str() {
+            Some(cursor_string) => cursor_string.to_string(),
+            None => "".to_string(),
+        };
     
         let beatmapsets = beatmapsets.iter().map(|beatmapset| {
             let title = beatmapset["title"].as_str().unwrap();
             let artist = beatmapset["artist"].as_str().unwrap();
             let creator = beatmapset["creator"].as_str().unwrap();
-            let url = format!("{}/beatmapsets/{}", self.base_url, beatmapset["id"].as_u64().unwrap());
-            let cover_url = beatmapset["covers"]["cover@2x"].as_str().unwrap();
             let card_url = beatmapset["covers"]["card@2x"].as_str().unwrap();
             let mp3_url = format!("https:{}",
                 beatmapset["preview_url"].as_str().unwrap()
             );
-            let download_url = format!("{}/beatmapsets/{}/download",
-                self.base_url,
-                beatmapset["id"].as_u64().unwrap(),
-            );
             let id = beatmapset["id"].as_u64().unwrap();
             let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
             let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
-            let mode = beatmaps[0]["mode"].as_str().unwrap();
             let status = beatmaps[0]["status"].as_str().unwrap();
             let star = beatmaps.iter().map(|beatmap| {
                 beatmap["difficulty_rating"].as_f64().unwrap() as f32
@@ -249,30 +270,29 @@ impl Api {
             let key = beatmaps.iter().map(|beatmap| {
                 beatmap["cs"].as_f64().unwrap() as f32
             }).collect::<Vec<f32>>();
-            let key = key.iter().map(|k| {
-                format!("{}", k)
-            }).collect::<Vec<String>>();
+
+            let mut star_str = String::new();
+            let mut key_str = String::new();
+            for (s, k) in star.iter().zip(key.iter()) {
+                star_str.push_str(&format!("{}, ", s));
+                key_str.push_str(&format!("{}, ", k));
+            }
+            star_str.pop();
+            star_str.pop();
+
             Beatmap {
+                id: id as i64,
                 title: title.to_string(),
                 artist: artist.to_string(),
                 creator: creator.to_string(),
-                url: url.to_string(),
-                cover_url: cover_url.to_string(),
+                stars: star_str,
+                keys: key_str,
                 card_url: card_url.to_string(),
                 mp3_url,
-                download_url,
-                id: id as u32,
-                favourite_count: favourite_count as u32,
-                mode: mode.to_string(),
-                status: status.to_string(),
-                star,
-                key,
+                cursor: cursor_string,
+                statu: status.to_string(),
             }
         }).collect::<Vec<Beatmap>>();
-        let cursor_string = match json["cursor_string"].as_str() {
-            Some(cursor_string) => cursor_string.to_string(),
-            None => "".to_string(),
-        };
         Ok((beatmapsets, cursor_string))
     }
 

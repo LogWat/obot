@@ -13,7 +13,7 @@ use serenity::{
 
 use crate::owner;
 use crate::web::{
-    api::{Api}, handler,
+    api::{Api, Beatmap}, handler,
 };
 
 // dbg command: init_database
@@ -28,6 +28,8 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
+
+    let keys = vec!["4", "7"];
 
     let status: Vec<&str> = match arg.single::<String>() {
         Ok(s) => {
@@ -56,6 +58,30 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
             return Ok(());
         }
     };
+
+    let mut cursor = String::new();
+    let mut beatmapsets: Vec<Beatmap> = Vec::new();
+    for k in keys {
+        for s in &status {
+            loop {
+                let res = match api.get_beatmapsets_with_cursor(&token, "3", s, k, &cursor).await {
+                    Ok(r) => r,
+                    Err(_e) => {
+                        msg.channel_id.say(&ctx.http, "[ERROR] Failed to fetch beatmapsets! Please inform the owner...").await?;
+                        return Ok(());
+                    }
+                };
+                cursor = res.1;
+                beatmapsets.extend(res.0);
+                if cursor.is_empty() {
+                    break;
+                }
+                
+            }
+        }
+    }
+
+
 
     Ok(())
 }
