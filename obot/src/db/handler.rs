@@ -1,10 +1,9 @@
-use std::error::Error;
-
 use serenity::{
     prelude::*,
 };
 
 use std::sync::{Arc};
+use std::io::{Error, ErrorKind};
 
 use crate::cache::Database;
 use crate::web::api;
@@ -21,7 +20,7 @@ impl DBHandler {
         Self { db }
     }
 
-    pub async fn insert(&self, status: &str, beatmapset: &Beatmap) -> Result<(), Box<dyn Error>> {
+    pub async fn insert(&self, status: &str, beatmapset: &Beatmap) -> Result<(), Box<dyn std::error::Error>> {
         let db = self.db.lock().await;
 
         match status {
@@ -74,9 +73,19 @@ impl DBHandler {
         Ok(())
     }
 
+    fn get_beatmapsets_with_key(&self, beatmapsets: Vec<Beatmap>, key: &str) -> Vec<Beatmap> {
+        let mut beatmapsets_with_key = Vec::new();
+        for beatmapset in beatmapsets {
+            if beatmapset.keys.contains(key) {
+                beatmapsets_with_key.push(beatmapset);
+            }
+        }
+        beatmapsets_with_key
+    }
+
     // select_by: select beatmapset by id, title, artist, creator, or cursor (stars is other method)
-    // キー数で指定しちゃうと量が多すぎるので，keyは
-    pub async fn select(&self, select_by: &str, status: &str, value: &str) -> Result<Vec<Beatmap>, Box<dyn Error>> {
+    // keysは"4, 7"のようにカンマ区切りで格納されているので，"4"とか"7"が含まれているかどうかで検索する必要がある
+    pub async fn select(&self, select_by: &str, status: &str, value: &str) -> Result<Vec<Beatmap>, Box<dyn std::error::Error>> {
         let db = self.db.lock().await;
         let mut beatmapsets = Vec::new();
         let res = match status {
@@ -87,7 +96,11 @@ impl DBHandler {
                     "artist" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets WHERE artist = ?", value).fetch_all(&*db).await,
                     "creator" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets WHERE creator = ?", value).fetch_all(&*db).await,
                     "cursor" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets WHERE cursor = ?", value).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
+                    "keys" => {
+                        let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets").fetch_all(&*db).await?;
+                        Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
+                    },
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "loved" => {
@@ -97,7 +110,11 @@ impl DBHandler {
                     "artist" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets WHERE artist = ?", value).fetch_all(&*db).await,
                     "creator" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets WHERE creator = ?", value).fetch_all(&*db).await,
                     "cursor" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets WHERE cursor = ?", value).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
+                    "keys" => {
+                        let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets").fetch_all(&*db).await?;
+                        Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
+                    },
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "qualified" => {
@@ -107,7 +124,11 @@ impl DBHandler {
                     "artist" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets WHERE artist = ?", value).fetch_all(&*db).await,
                     "creator" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets WHERE creator = ?", value).fetch_all(&*db).await,
                     "cursor" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets WHERE cursor = ?", value).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
+                    "keys" => {
+                        let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets").fetch_all(&*db).await?;
+                        Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
+                    },
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "graveyard" => {
@@ -117,61 +138,14 @@ impl DBHandler {
                     "artist" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets WHERE artist = ?", value).fetch_all(&*db).await,
                     "creator" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets WHERE creator = ?", value).fetch_all(&*db).await,
                     "cursor" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets WHERE cursor = ?", value).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
+                    "keys" => {
+                        let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets").fetch_all(&*db).await?;
+                        Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
+                    },
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
-            _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid status"))),
-        };
-
-        match res {
-            Ok(res) => {
-                for beatmapset in res {
-                    beatmapsets.push(beatmapset);
-                }
-            },
-            Err(e) => return Err(Box::new(e)),
-        }
-
-        Ok(beatmapsets)
-    }
-
-    // select_top: select by specifying the amount of top beatmaps to be selected
-    // select_by: * (all), keys
-    // [!] too many selections shouldn't be made
-    pub async fn select_top(&self, status: &str, select_by: &str, keys: &str, range: &str) -> Result<Vec<Beatmap>, Box<dyn Error>> {
-        let db = self.db.lock().await;
-        let mut beatmapsets = Vec::new();
-        
-        let res = match status {
-            "ranked" => {
-                match select_by {
-                    "*" => sqlx::query!("SELECT * FROM ranked_beatmapsets ORDER BY stars DESC LIMIT ?", range).fetch_all(&*db).await,
-                    "keys" => sqlx::query!("SELECT * FROM (SELECT * FROM ranked_beatmapsets WHERE keys = ?) ORDER BY stars DESC LIMIT ?", keys, range).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
-                }
-            },
-            "loved" => {
-                match select_by {
-                    "*" => sqlx::query!("SELECT * FROM loved_beatmapsets ORDER BY stars DESC LIMIT ?", range).fetch_all(&*db).await,
-                    "keys" => sqlx::query!("SELECT * FROM loved_beatmapsets ORDER BY keys DESC LIMIT ?", range).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
-                }
-            },
-            "qualified" => {
-                match select_by {
-                    "*" => sqlx::query!("SELECT * FROM qualified_beatmapsets ORDER BY stars DESC LIMIT ?", range).fetch_all(&*db).await,
-                    "keys" => sqlx::query!("SELECT * FROM qualified_beatmapsets ORDER BY keys DESC LIMIT ?", range).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
-                }
-            },
-            "graveyard" => {
-                match select_by {
-                    "*" => sqlx::query!("SELECT * FROM graveyard_beatmapsets ORDER BY stars DESC LIMIT ?", range).fetch_all(&*db).await,
-                    "keys" => sqlx::query!("SELECT * FROM graveyard_beatmapsets ORDER BY keys DESC LIMIT ?", range).fetch_all(&*db).await,
-                    _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid select_by"))),
-                }
-            },
-            _ => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Invalid status"))),
+            _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid status"))),
         };
 
         match res {
