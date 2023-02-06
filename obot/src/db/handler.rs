@@ -13,6 +13,7 @@ pub struct DBHandler {
     db: Arc<Mutex<sqlx::SqlitePool>>,
 }
 
+// TODO: statusごとにSQL文作ってる問題を解決する
 impl DBHandler {
     pub async fn new(ctx: &Context) -> Self {
         let data = ctx.data.read().await;
@@ -20,10 +21,10 @@ impl DBHandler {
         Self { db }
     }
 
-    pub async fn insert(&self, status: &str, beatmapset: &Beatmap) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn insert(&self, beatmapset: &Beatmap) -> Result<(), Box<dyn std::error::Error>> {
         let db = self.db.lock().await;
 
-        match status {
+        match beatmapset.statu.as_str() {
             "ranked" => {
                 match sqlx::query!(r#"
                 INSERT INTO ranked_beatmapsets
@@ -73,6 +74,40 @@ impl DBHandler {
         Ok(())
     }
 
+    pub async fn get_db_size(&self, status: &str) -> Result<i32, Box<dyn std::error::Error>> {
+        let db = self.db.lock().await;
+
+        let size: i32 = match status {
+            "ranked" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM ranked_beatmapsets").fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            "loved" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM loved_beatmapsets").fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            "qualified" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM qualified_beatmapsets").fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            _ => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM graveyard_beatmapsets").fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+        };
+
+        Ok(size)
+    }
+
+    // like使いたいけどなぜかエラーになる
     fn get_beatmapsets_with_key(&self, beatmapsets: Vec<Beatmap>, key: &str) -> Vec<Beatmap> {
         let mut beatmapsets_with_key = Vec::new();
         for beatmapset in beatmapsets {
@@ -100,6 +135,7 @@ impl DBHandler {
                         let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets").fetch_all(&*db).await?;
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets").fetch_all(&*db).await,
                     _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
@@ -114,6 +150,7 @@ impl DBHandler {
                         let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets").fetch_all(&*db).await?;
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets").fetch_all(&*db).await,
                     _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
@@ -128,6 +165,7 @@ impl DBHandler {
                         let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets").fetch_all(&*db).await?;
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets").fetch_all(&*db).await,
                     _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
@@ -142,6 +180,7 @@ impl DBHandler {
                         let beatmapsets_tmp = sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets").fetch_all(&*db).await?;
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets").fetch_all(&*db).await,
                     _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
@@ -158,5 +197,39 @@ impl DBHandler {
         }
 
         Ok(beatmapsets)
+    }
+
+
+    // select_by: keys, stars
+    pub async fn select_with_limit(&self, select_by: &str, status: &str, value: &str, limit: i64, offset: i64) -> Result<Vec<Beatmap>, Box<dyn std::error::Error>> {
+        let db = self.db.lock().await;
+
+        let res = match status {
+            "ranked" => {
+                match select_by {
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                }
+            },
+            "loved" => {
+                match select_by {
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                }
+            },
+            "qualified" => {
+                match select_by {
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                }
+            },
+            "graveyard" => {
+                match select_by {
+                    "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                }
+            },
+        };
+
+        match res {
+            Ok(res) => return Ok(res),
+            Err(e) => return Err(Box::new(e)),
+        }
     }
 }
