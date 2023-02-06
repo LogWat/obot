@@ -130,13 +130,9 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
     let now = time::SystemTime::now();
     info!("{}", format!("check_maps started at {:?}", now));
 
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
-        Err(e) => {
-            error!("{}", format!("Failed to update token: {}", e));
-            return Ok(());
-        }
+    let api = match Api::new().await {
+        Ok(a) => a,
+        Err(e) => return Err(e),
     };
 
     let data = ctx.data.read().await;
@@ -146,7 +142,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
     let mode = "3"; // mania only
     let mut download_maps = Vec::new();
     for status in statuses.iter() {
-        let maps = match api.get_beatmaps(&token, mode, status, "4", false).await {
+        let maps = match api.get_beatmaps(mode, status, "4", false).await {
             Ok(m) => m,
             Err(_e) => return Ok(()),
         };

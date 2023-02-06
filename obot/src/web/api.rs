@@ -32,6 +32,7 @@ pub struct Api {
     pub secret: String,
     pub base_url: String,
     pub download_base_url: String,
+    token: String,
 }
 
 pub fn get_url(beatmap: &Beatmap) -> String {
@@ -40,29 +41,20 @@ pub fn get_url(beatmap: &Beatmap) -> String {
 }
 
 impl Api {
-    pub fn new() -> Self {
+    pub async fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let secret = env::var("API_SECRET").expect("API_SECRET must be set");
         let user_id = env::var("USER_ID").expect("USER_ID must be set").parse::<u64>().unwrap();
         let base_url = env::var("API_BASE").expect("API_BASE must be set");
         let download_base_url = env::var("DOWNLOAD_BASE").expect("DOWNLOAD_BASE must be set");
-        let http = reqwest::Client::new();
-        Self {
-            http,
-            user_id,
-            secret,
-            base_url,
-            download_base_url,
-        }
-    }
-
-    pub async fn update_token(&self) -> Result<String, Box<dyn Error + Send + Sync>> {
-        let url = format!("{}/oauth/token", self.base_url);
+        
+        // get token
+        let url = format!("{}/oauth/token", base_url);
         let mut params = HashMap::new();
-        params.insert("client_id", self.user_id.to_string());
-        params.insert("client_secret", self.secret.to_string());
+        params.insert("client_id", user_id.to_string());
+        params.insert("client_secret", secret.to_string());
         params.insert("grant_type", "client_credentials".to_string());
         params.insert("scope", "public".to_string());
-        let token = match self.http.post(&url)
+        let token = match reqwest::Client::new().post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .form(&params)
@@ -73,7 +65,7 @@ impl Api {
                         Ok(text) => {
                             let json: Value = serde_json::from_str(&text)?;
                             let token = json["access_token"].as_str().unwrap();
-                            Ok(token.to_string())
+                            token.to_string()
                         },
                         Err(e) => return Err(Box::new(e)),
                     }
@@ -81,12 +73,21 @@ impl Api {
                 Err(e) => return Err(Box::new(e)),
             };
 
-        token
+        let http = reqwest::Client::new();
+        let api = Api {
+            http,
+            user_id,
+            secret,
+            base_url,
+            download_base_url,
+            token,
+        };
+
+        Ok(api)
     }
 
     pub async fn get_beatmapsets_with_cursor(
         &self,
-        token: &str,
         mode: &str, // mania: 3
         status: &str, // ranked, loved, qualified, pending, graveyard
         key: &str, // 4, 7...
@@ -94,7 +95,7 @@ impl Api {
     ) -> Result<(Vec<Beatmap>, String), Box<dyn Error + Send + Sync>> {
         let url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D{}&nsfw=&cursor_string={}",
         self.base_url, mode, status, key, cursor_string);
-        let text = match self.req_with_token(&token, &url).await {
+        let text = match self.req_with_token(&url).await {
             Ok(text) => text,
             Err(e) => return Err(e),
         };
@@ -107,8 +108,7 @@ impl Api {
     }
 
     pub async fn get_beatmaps(
-        &self, 
-        token: &str,
+        &self,
         mode: &str,
         status: &str,
         key: &str,
@@ -120,7 +120,7 @@ impl Api {
         self.base_url, mode, status, key, cursor_string);
 
         loop {
-            let text = match self.req_with_token(&token, &url).await {
+            let text = match self.req_with_token(&url).await {
                 Ok(text) => text,
                 Err(e) => {
                     error!("Failed to get beatmaps: {}", e);
@@ -153,14 +153,13 @@ impl Api {
 
     // idからbeatmapset構造体を取得
     pub async fn get_beatmaps_by_ids(
-        &self, 
-        token: &str,
+        &self,
         ids: Vec<String>
     ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
         let mut bmsets = Vec::new();
         for id in ids {
             let url = &format!("{}/api/v2/beatmapsets/{}", self.base_url, id);
-            let text = match self.req_with_token(&token, &url).await {
+            let text = match self.req_with_token(&url).await {
                 Ok(text) => text,
                 Err(e) => {
                     error!("req_with_token error: {}", e);
@@ -211,13 +210,12 @@ impl Api {
     // private
     async fn req_with_token(
         &self,
-        token: &str,
         url: &str,
     ) -> Result<String, Box<dyn Error + Send + Sync>> {
         let res = self.http.get(url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {}", self.token))
             .send()
             .await?;
         let text = res.text().await?;

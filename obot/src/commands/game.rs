@@ -13,8 +13,9 @@ use serenity::{
 
 use crate::owner;
 use crate::web::{
-    api::{Api, Beatmap}, handler,
+    api::{Api, Beatmap}, handler as web_handler,
 };
+use crate::db::handler as db_handler;
 
 // dbg command: init_database
 // initialize database
@@ -50,11 +51,11 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
         }
     };
 
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
-        Err(_e) => {
-            msg.channel_id.say(&ctx.http, "[ERROR] Failed to update token! Please inform the owner...").await?;
+    let api = match Api::new().await {
+        Ok(a) => a,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
+            error!("Failed to initialize api: {}", e);
             return Ok(());
         }
     };
@@ -64,7 +65,7 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
     for k in keys {
         for s in &status {
             loop {
-                let res = match api.get_beatmapsets_with_cursor(&token, "3", s, k, &cursor).await {
+                let res = match api.get_beatmapsets_with_cursor("3", s, k, &cursor).await {
                     Ok(r) => r,
                     Err(_e) => {
                         msg.channel_id.say(&ctx.http, "[ERROR] Failed to fetch beatmapsets! Please inform the owner...").await?;
@@ -75,9 +76,10 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
                 beatmapsets.extend(res.0);
                 if cursor.is_empty() {
                     break;
-                }
-                
+                }    
             }
+            // get beatmapsets from db
+
         }
     }
 
@@ -93,7 +95,7 @@ async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
-    match handler::check_maps(ctx).await {
+    match web_handler::check_maps(ctx).await {
         Ok(_) => {},
         Err(_e) => {},
     }
@@ -101,28 +103,19 @@ async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-// test command: get_maps
-// fetch api and print maps
+// test command: newmaps
 #[command]
-#[description("最新のbeatmapsets 50件を表示します(ranked, loved, qualified)")]
+#[description("最新のbeatmapsets 10件を表示します(ranked, loved, qualified)")]
 #[max_args(1)]
 #[min_args(0)]
 #[usage("get_maps [mode] (default: ranked)")]
-async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
+async fn newmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
     let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
-            return Ok(());
-        }
-    };
     let mode = "3"; // mania
-
     let status = match arg.current() {
         Some("ranked") => "ranked",
         Some("loved") => "loved",
@@ -130,26 +123,7 @@ async fn get_maps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         _ => "ranked",
     };
 
-    let maps = match api.get_beatmaps(&token, mode, status, "4", false).await {
-        Ok(m) => m,
-        Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
-            return Ok(());
-        }
-    };
-    let mut map_list = String::new();
-    for map in maps {
-        map_list.push_str(&format!("{}: {} - {} [{}]\n", map.id, map.artist, map.title, map.star[0]));
-    }
-    msg.channel_id.send_message(&ctx.http, |m| {
-        m.embed(|e| {
-            e.title(&format!("{} mania maps", status));
-            e.description(map_list);
-            e
-        });
-        m
-    }).await.expect("Failed to send message");
-    Ok(())
+
 }
 
 // test command: download_map
@@ -164,11 +138,11 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
+    let api = match Api::new().await {
+        Ok(a) => a,
         Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
+            error!("Failed to initialize api: {}", e);
             return Ok(());
         }
     };
@@ -177,7 +151,7 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     while let Ok(id) = marg.single::<String>() {
         map_ids.push(id);
     }
-    let maps = match api.get_beatmaps_by_ids(&token, map_ids).await {
+    let maps = match api.get_beatmaps_by_ids(map_ids).await {
         Ok(m) => m,
         Err(e) => {
             msg.channel_id.say(&ctx.http, format!("Failed to get beatmaps: {}", e)).await?;
@@ -208,11 +182,11 @@ async fn mapset_info(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         return Ok(());
     }
 
-    let api = Api::new();
-    let token = match api.update_token().await {
-        Ok(t) => t,
+    let api = match Api::new().await {
+        Ok(a) => a,
         Err(e) => {
-            msg.channel_id.say(&ctx.http, format!("Failed to update token: {}", e)).await?;
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
+            error!("Failed to initialize api: {}", e);
             return Ok(());
         }
     };
@@ -223,7 +197,7 @@ async fn mapset_info(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         mapset_ids.push(id);
     }
 
-    let mapset = match api.get_beatmaps_by_ids(&token, mapset_ids).await {
+    let mapset = match api.get_beatmaps_by_ids(mapset_ids).await {
         Ok(m) => m,
         Err(_e) => {
             msg.channel_id.say(&ctx.http, format!("Failed to get mapset!\n Please inform the owner")).await?;
@@ -233,7 +207,7 @@ async fn mapset_info(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
 
     // 1件ずつembedで表示
     for map in mapset {
-        match handler::send_beatmap(&ctx, &map, &msg.channel_id).await {
+        match web_handler::send_beatmap(&ctx, &map, &msg.channel_id).await {
             Ok(_) => (),
             Err(e) => {
                 error!("Failed to send beatmap: {}", e);

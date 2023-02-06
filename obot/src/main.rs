@@ -50,7 +50,7 @@ struct General;
 #[group]
 #[description("Game commands")]
 #[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
-#[commands(get_maps, update_database, dlmaps, mapset_info)]
+#[commands(newmaps, update_database, dlmaps, mapset_info)]
 struct Game;
 
 #[tokio::main]
