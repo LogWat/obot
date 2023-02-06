@@ -118,6 +118,42 @@ impl DBHandler {
         beatmapsets_with_key
     }
 
+    pub async fn check_existence(&self, id: &str, status: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let db = self.db.lock().await;
+        let res = match status {
+            "ranked" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM ranked_beatmapsets WHERE id = ?", id).fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            "loved" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM loved_beatmapsets WHERE id = ?", id).fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            "qualified" => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM qualified_beatmapsets WHERE id = ?", id).fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+            _ => {
+                match sqlx::query!("SELECT COUNT(*) as count FROM graveyard_beatmapsets WHERE id = ?", id).fetch_one(&*db).await {
+                    Ok(r) => r.count,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            },
+        };
+
+        if res == 0 {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
     // select_by: select beatmapset by id, title, artist, creator, or cursor (stars is other method)
     // keysは"4, 7"のようにカンマ区切りで格納されているので，"4"とか"7"が含まれているかどうかで検索する必要がある
     pub async fn select(&self, select_by: &str, status: &str, value: &str) -> Result<Vec<Beatmap>, Box<dyn std::error::Error>> {
@@ -208,21 +244,25 @@ impl DBHandler {
             "ranked" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "loved" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "qualified" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
-            "graveyard" => {
+            _ => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
         };
