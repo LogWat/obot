@@ -205,8 +205,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
     let mut download_maps = Vec::new();
     for status in statuses.iter() {
         for key in keys.iter() {
-            let cursor = "";
-            let maps = match api.get_beatmapsets_with_cursor(mode, status, key, cursor).await {
+            let maps = match api.get_beatmapsets_with_cursor(mode, status, key, "").await {
                 Ok(m) => m,
                 Err(_e) => {
                     warn!("get_beatmapsets_with_cursor [{}] failed", status);
@@ -216,6 +215,9 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
 
             let mut new_maps = Vec::new();
             for map in maps.0.iter().rev() {
+                if map.statu != status.to_string() {
+                    continue;
+                }
                 let res = match db.check_existence(&map.id, status).await {
                     Ok(b) => b,
                     Err(e) => {
