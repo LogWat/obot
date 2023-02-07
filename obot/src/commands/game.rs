@@ -14,7 +14,7 @@ use crate::utility;
 use crate::web::{
     api::{Api, Beatmap}, handler as web_handler,
 };
-use crate::db::handler as db_handler;
+use crate::db::handler::DBHandler;
 
 // dbg command: init_database
 // initialize database
@@ -38,14 +38,11 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
                 "loved" => ["loved"].to_vec(),
                 "qualified" => ["qualified"].to_vec(),
                 "all" => ["ranked", "loved", "qualified"].to_vec(),
-                _ => {
-                    msg.channel_id.say(&ctx.http, "Invalid status: ranked, loved, qualified, all").await?;
-                    return Ok(());
-                }
+                _ => ["ranked", "loved", "qualified"].to_vec(),
             }
         }
         Err(_e) => {
-            msg.channel_id.say(&ctx.http, "Failed to parse status").await?;
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to parse status! Please inform the owner...").await?;
             return Ok(());
         }
     };
@@ -59,16 +56,19 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
         }
     };
 
+    let db = DBHandler::new(ctx).await;
+
     let mut cursor = String::new();
     let mut beatmapsets: Vec<Beatmap> = Vec::new();
+    let mut over_loop_checker = 0;
     for k in keys {
         for s in &status {
             loop {
                 let res = match api.get_beatmapsets_with_cursor("3", s, k, &cursor).await {
                     Ok(r) => r,
                     Err(_e) => {
-                        msg.channel_id.say(&ctx.http, "[ERROR] Failed to fetch beatmapsets! Please inform the owner...").await?;
-                        return Ok(());
+                        msg.channel_id.say(&ctx.http, &format!("[ERROR] Failed to get beatmapsets! (status: {}, key: {})", s, k)).await?;
+                        break;
                     }
                 };
                 cursor = res.1;
@@ -76,13 +76,36 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
                 if cursor.is_empty() {
                     break;
                 }    
+                over_loop_checker += 1;
+                if over_loop_checker > 1000 {
+                    msg.channel_id.say(&ctx.http, &format!("[ERROR] Too many loops! (status: {}, key: {})", s, k)).await?;
+                    break;
+                }
             }
             // get beatmapsets from db
-
+            for map in &beatmapsets {
+                let res = match db.check_existence(&map.id, &map.statu).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!("Failed to check existence: {}", e);
+                        continue;
+                    }
+                };
+                if !res {
+                    match db.insert(&map).await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            error!("Failed to insert: {}", e);
+                            continue;
+                        }
+                    }
+                }
+            }
+            // send msg to channel
+            msg.channel_id.say(&ctx.http, &format!("Finished to initialize database (status: {}, key: {}) => {} beatmapsets", s, k, beatmapsets.len())).await?;
+            beatmapsets.clear();
         }
     }
-
-
 
     Ok(())
 }
@@ -161,6 +184,28 @@ async fn newmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
             return Ok(());
         }
     };
+
+    // update database
+    let db = DBHandler::new(ctx).await;
+    for map in for_db {
+        match db.check_existence(&map.id, &map.statu).await {
+            Ok(b) => {
+                if b == false {
+                    match db.insert(&map).await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            error!("Failed to insert beatmap: {}", e);
+                            continue;
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                error!("Failed to check existence: {}", e);
+                continue;
+            }
+        }
+    }
 
     Ok(())
 }

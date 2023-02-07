@@ -229,8 +229,8 @@ impl Api {
             let mut star_str = String::new();
             let mut key_str = String::new();
             for (s, k) in star.iter().zip(key.iter()) {
-                star_str.push_str(&format!("{}, ", s));
-                key_str.push_str(&format!("{}, ", k));
+                star_str.push_str(&format!("{},", s));
+                key_str.push_str(&format!("{},", k));
             }
             star_str.pop();
             star_str.pop();

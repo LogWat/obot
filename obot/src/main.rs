@@ -52,7 +52,7 @@ struct General;
 #[group]
 #[description("Game commands")]
 #[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
-#[commands(newmaps, update_database, dlmaps, mapset_info)]
+#[commands(newmaps, update_database, dlmaps, mapset_info, init_database)]
 struct Game;
 
 #[tokio::main]
@@ -139,10 +139,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env_hashmap.insert("log_channel".to_string(), env_helper("DISCORD_LOG_CHANNEL_ID"));
     env_hashmap.insert("4k_ranked".to_string(), env_helper("DISCORD_4KMAP_RANKED_CHANNEL_ID"));
     env_hashmap.insert("4k_loved".to_string(), env_helper("DISCORD_4KMAP_LOVED_CHANNEL_ID"));
-    env_hashmap.insert("4k_qualifed".to_string(), env_helper("DISCORD_4KMAP_QUALIFIED_CHANNEL_ID"));
+    env_hashmap.insert("4k_qualified".to_string(), env_helper("DISCORD_4KMAP_QUALIFIED_CHANNEL_ID"));
     env_hashmap.insert("7k_ranked".to_string(), env_helper("DISCORD_7KMAP_RANKED_CHANNEL_ID"));
     env_hashmap.insert("7k_loved".to_string(), env_helper("DISCORD_7KMAP_LOVED_CHANNEL_ID"));
-    env_hashmap.insert("7k_qualifed".to_string(), env_helper("DISCORD_7KMAP_QUALIFIED_CHANNEL_ID"));
+    env_hashmap.insert("7k_qualified".to_string(), env_helper("DISCORD_7KMAP_QUALIFIED_CHANNEL_ID"));
     env_hashmap.insert("api_base".to_string(), env_helper("API_BASE"));
     env_hashmap.insert("download_base".to_string(), env_helper("DOWNLOAD_BASE"));
     env_hashmap.insert("user_id".to_string(), env_helper("USER_ID"));

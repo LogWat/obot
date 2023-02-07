@@ -9,8 +9,8 @@ use serenity::{
 };
 use itertools::Itertools;
 
-use crate::cache::Database;
 use crate::utility;
+use crate::db::handler::DBHandler;
 use crate::web::api;
 use api::Api;
 
@@ -71,8 +71,8 @@ pub async fn simple_beatmap_send(ctx: &Context, beatmapsets: &Vec<Beatmap>, chan
         });
         m
     }).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(Box::new(e)),
+        Ok(_) => {},
+        Err(e) => return Err(Box::new(e)),
     };
 
     Ok(())
@@ -128,7 +128,7 @@ pub fn star_string(star: &str, keys: &str) -> String {
         star_str.push_str(&format!("{}k: ", k));
 
         if max_star == min_star {
-            star_str.push_str(&format!("{}{}[0m", mxsc, max_star));
+            star_str.push_str(&format!("{}{}[0m\n", mxsc, max_star));
         } else {
             star_str.push_str(&format!("{}{}[0m ~ {}{}[0m\n", mnsc, min_star, mxsc, max_star));
         }
@@ -177,6 +177,9 @@ pub fn keys_to_vec(keys: &str) -> Vec<String> {
 pub fn star_to_vec(star: &str) -> Vec<f32> {
     let mut star_vec = Vec::new();
     for s in star.split(',') {
+        if s.is_empty() {
+            continue;
+        }
         star_vec.push(s.parse::<f32>().unwrap());
     }
     star_vec
@@ -194,71 +197,69 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
         Err(e) => return Err(e),
     };
 
-    let data = ctx.data.read().await;
-    let db = data.get::<Database>().unwrap();
+    let db = DBHandler::new(ctx).await;
 
     let statuses = ["ranked", "loved", "qualified"];
+    let keys = ["4", "7"];
     let mode = "3"; // mania only
     let mut download_maps = Vec::new();
     for status in statuses.iter() {
-        let maps = match api.get_beatmaps(mode, status, "4", false).await {
-            Ok(m) => m,
-            Err(_e) => return Ok(()),
-        };
-        let mut map_ids = Vec::new();
-        let db = db.lock().await;
-        let rows = sqlx::query!(
-            "SELECT id FROM beatmapsets WHERE stat = ?",
-            status)
-            .fetch_all(&*db)
-            .await?;
-        for row in rows {
-            map_ids.push(row.id);
-        }
+        for key in keys.iter() {
+            let cursor = "";
+            let maps = match api.get_beatmapsets_with_cursor(mode, status, key, cursor).await {
+                Ok(m) => m,
+                Err(_e) => {
+                    warn!("get_beatmapsets_with_cursor [{}] failed", status);
+                    continue;
+                }
+            };
 
-        let mut new_maps = Vec::new();
-        for map in maps {
-            if map_ids.contains(&(map.id as i64)) == false {
-                sqlx::query!("INSERT INTO beatmapsets (id, title, artist, stat) VALUES (?, ?, ?, ?)",
-                 map.id, map.title, map.artist, status)
-                    .execute(&*db)
-                    .await?;
-                new_maps.push(map.clone());
-                // download only ranked and loved maps
-                if status == &"ranked" || status == &"loved" {
+            let mut new_maps = Vec::new();
+            for map in maps.0.iter().rev() {
+                let res = match db.check_existence(&map.id, status).await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        error!("{}", format!("Failed to check existence: {}", e));
+                        continue;
+                    }
+                };
+                if !res {
+                    new_maps.push(map.clone());
                     download_maps.push(map.clone());
                 }
             }
-        }
 
-        if new_maps.len() > 0 {
-            let mut map_list = String::new();
-            map_list.push_str(&format!("```ansi\n"));
-            for map in new_maps {
-
-                map_list.push_str(&format!("[{}] [1m{}[0m (by {}) ",map.id, map.title, map.artist));
-                map_list.push_str(&format!("{}\n", star_string(&map.stars, &map.keys)));
-            }
-            map_list.push_str(&format!("```"));
-            let channel_id: ChannelId = env::var("DISCORD_MAP_CHANNEL_ID").unwrap().parse().unwrap();
-            let color = match status {
-                &"ranked" => 0x00ff00,
-                &"loved" => 0xff00ff,
-                &"qualified" => 0xffff00,
-                _ => 0x000000,
+            // 送信だけ
+            let env_name = format!("{}k_{}", key, status);
+            let channel_id = match utility::get_env_from_context(ctx, &env_name).await.parse::<ChannelId>() {
+                Ok(c) => c,
+                Err(_e) => {
+                    warn!("get_env_from_context [{}] failed", env_name);
+                    continue;
+                }
             };
-            /*
-            channel_id.send_message(&ctx.http, |m| {
-                m.embed(|e| {
-                    e.title(format!("New {} maps", status))
-                        .description(map_list)
-                        .color(color)
-                });
-                m
-            }).await?;
-            */
-        } else {
-            info!("{}", format!("No new {} maps", status));
+            if new_maps.len() > 0 {
+                info!("{}", format!("{} new {} maps ({}k)", new_maps.len(), status, key));
+                for map in new_maps {
+                    match send_beatmap(ctx, &map, &channel_id).await {
+                        Ok(_) => {},
+                        Err(e) => {
+                            error!("{}", format!("Failed to send beatmap: {}", e));
+                            continue;
+                        }
+                    }
+                }
+            } else {
+                info!("{}", format!("No new {} maps", status));
+            }
+        }
+    }
+
+    // DBに追加
+    for map in download_maps.iter() {
+        match db.insert(map).await {
+            Ok(_) => {},
+            Err(e) => error!("{}", format!("Failed to insert map: {}", e)),
         }
     }
 

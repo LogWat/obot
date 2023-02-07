@@ -1,9 +1,11 @@
+#![allow(dead_code)]
 use serenity::{
     prelude::*,
 };
 
 use std::sync::{Arc};
-use std::io::{Error, ErrorKind};
+use std::io::{Error as StdError, ErrorKind};
+use std::error::Error;
 
 use crate::cache::Database;
 use crate::web::api;
@@ -21,7 +23,7 @@ impl DBHandler {
         Self { db }
     }
 
-    pub async fn insert(&self, beatmapset: &Beatmap) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn insert(&self, beatmapset: &Beatmap) -> Result<(), Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
 
         match beatmapset.statu.as_str() {
@@ -74,7 +76,7 @@ impl DBHandler {
         Ok(())
     }
 
-    pub async fn get_db_size(&self, status: &str) -> Result<i32, Box<dyn std::error::Error>> {
+    pub async fn get_db_size(&self, status: &str) -> Result<i32, Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
 
         let size: i32 = match status {
@@ -118,7 +120,7 @@ impl DBHandler {
         beatmapsets_with_key
     }
 
-    pub async fn check_existence(&self, id: &str, status: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn check_existence(&self, id: &i64, status: &str) -> Result<bool, Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
         let res = match status {
             "ranked" => {
@@ -156,7 +158,7 @@ impl DBHandler {
 
     // select_by: select beatmapset by id, title, artist, creator, or cursor (stars is other method)
     // keysは"4, 7"のようにカンマ区切りで格納されているので，"4"とか"7"が含まれているかどうかで検索する必要がある
-    pub async fn select(&self, select_by: &str, status: &str, value: &str) -> Result<Vec<Beatmap>, Box<dyn std::error::Error>> {
+    pub async fn select(&self, select_by: &str, status: &str, value: &str) -> Result<Vec<Beatmap>, Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
         let mut beatmapsets = Vec::new();
         let res = match status {
@@ -172,7 +174,7 @@ impl DBHandler {
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets").fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "loved" => {
@@ -187,7 +189,7 @@ impl DBHandler {
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets").fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "qualified" => {
@@ -202,7 +204,7 @@ impl DBHandler {
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets").fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "graveyard" => {
@@ -217,10 +219,10 @@ impl DBHandler {
                         Ok(self.get_beatmapsets_with_key(beatmapsets_tmp, value))
                     },
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets").fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
-            _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid status"))),
+            _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid status"))),
         };
 
         match res {
@@ -237,32 +239,32 @@ impl DBHandler {
 
 
     // select_by: keys, stars
-    pub async fn select_with_limit(&self, select_by: &str, status: &str, value: &str, limit: i64, offset: i64) -> Result<Vec<Beatmap>, Box<dyn std::error::Error>> {
+    pub async fn select_with_limit(&self, select_by: &str, status: &str, _value: &str, limit: i64, offset: i64) -> Result<Vec<Beatmap>, Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
 
         let res = match status {
             "ranked" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "loved" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "qualified" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             _ => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
-                    _ => return Err(Box::new(Error::new(ErrorKind::Other, "Invalid select_by"))),
+                    _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
         };
