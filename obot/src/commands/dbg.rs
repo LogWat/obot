@@ -59,8 +59,9 @@ async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let channel: GuildChannel = msg.channel_id.to_channel(&ctx.http).await?.guild().unwrap();
     let messages = match channel.messages(&ctx.http, |r| r.limit(nd)).await {
         Ok(m) => m,
-        Err(_) => {
+        Err(e) => {
             msg.channel_id.say(&ctx.http, "Failed to get messages").await?;
+            error!("Failed to get messages: {}", e);
             return Ok(());
         }
     };
@@ -75,8 +76,9 @@ async fn delmsg(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
     match channel.delete_messages(&ctx.http, &ids).await {
         Ok(_) => (),
-        Err(_) => {
+        Err(e) => {
             msg.channel_id.say(&ctx.http, "Failed to delete messages").await?;
+            error!("Failed to delete messages: {}", e);
             return Ok(());
         }
     }

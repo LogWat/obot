@@ -22,9 +22,7 @@ def get_beatmapsets(api, token):
             print("Error: {}".format(r.status_code))
             return
         data = r.json()
-        for beatmaps in data["beatmapsets"]:
-            counter += 1
-            print("{}: {}".format(counter, beatmaps["title"]))
+        print(data)
         if data["cursor_string"] is None:
             break
         cursor_string = "&cursor_string={}".format(data["cursor_string"])
@@ -71,5 +69,5 @@ def download(beatmapsets_id, filename):
     print("Downloaded {}".format(filename))
 
 
-# _ = get_beatmapsets(graveyard_api, token)
-_ = write_beatmapsets(graveyard_api, token, "graveyard.txt")
+_ = get_beatmapsets(ranked_api, token)
+#_ = write_beatmapsets(graveyard_api, token, "graveyard.txt")
