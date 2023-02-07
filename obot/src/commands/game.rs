@@ -1,5 +1,3 @@
-use std::env;
-
 use serenity::{
     framework::standard::{
         macros::{command},
@@ -12,6 +10,7 @@ use serenity::{
 };
 
 use crate::owner;
+use crate::utility;
 use crate::web::{
     api::{Api, Beatmap}, handler as web_handler,
 };
@@ -51,7 +50,7 @@ async fn init_database(ctx: &Context, msg: &Message, mut arg: Args) -> CommandRe
         }
     };
 
-    let api = match Api::new().await {
+    let api = match Api::new(ctx).await {
         Ok(a) => a,
         Err(e) => {
             msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
@@ -105,25 +104,65 @@ async fn update_database(ctx: &Context, msg: &Message) -> CommandResult {
 
 // test command: newmaps
 #[command]
-#[description("最新のbeatmapsets 10件を表示します(ranked, loved, qualified)")]
-#[max_args(1)]
+#[description("最新のbeatmapsets情報10件を表示します(ranked, loved, qualified)")]
+#[usage("newmaps [status] (default: ranked) [key] (default: 4)")]
+#[max_args(2)]
 #[min_args(0)]
-#[usage("get_maps [mode] (default: ranked)")]
+#[usage("newmaps [mode] (default: ranked)")]
 async fn newmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     if owner::is_owner(&ctx, msg.author.id).await == false {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
-    let api = Api::new();
+
+    let api = match Api::new(ctx).await {
+        Ok(a) => a,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
+            error!("Failed to initialize api: {}", e);
+            return Ok(());
+        }
+    };
+
     let mode = "3"; // mania
+    // default status is ranked
     let status = match arg.current() {
         Some("ranked") => "ranked",
         Some("loved") => "loved",
         Some("qualified") => "qualified",
         _ => "ranked",
     };
+    let key = match arg.current() {
+        Some("4") => "4",
+        Some("7") => "7",
+        _ => "4",
+    };
+    let cursor = String::new();
 
+    let beatmapsets = match api.get_beatmapsets_with_cursor(mode, status, key, &cursor).await {
+        Ok(b) => b,
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to fetch beatmapsets... Please inform the owner!").await?;
+            error!("Failed to fetch beatmapsets: {}", e);
+            return Ok(());
+        }
+    };
 
+    // top 10 beatmapsets
+    let mut beatmapsets = beatmapsets.0;
+    let for_db = beatmapsets.clone();
+    beatmapsets.truncate(10);
+
+    match web_handler::simple_beatmap_send(ctx, &beatmapsets, &msg.channel_id).await {
+        Ok(_) => {},
+        Err(e) => {
+            msg.channel_id.say(&ctx.http, "[ERROR] Failed to send beatmapsets... Please inform the owner!").await?;
+            error!("Failed to send beatmapsets: {}", e);
+            return Ok(());
+        }
+    };
+
+    Ok(())
 }
 
 // test command: download_map
@@ -138,7 +177,7 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         msg.channel_id.say(&ctx.http, "You are not the owner").await?;
         return Ok(());
     }
-    let api = match Api::new().await {
+    let api = match Api::new(ctx).await {
         Ok(a) => a,
         Err(e) => {
             msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;
@@ -159,7 +198,7 @@ async fn dlmaps(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         }
     };
     
-    let dir = env::var("MAP_PATH").unwrap();
+    let dir = utility::get_env_from_context(ctx, "map_path").await;
     if let Err(e) = api.download_beatmaps(maps, &dir).await {
         msg.channel_id.say(&ctx.http, format!("Failed to download beatmaps: {}", e)).await?;
         return Ok(());
@@ -182,7 +221,7 @@ async fn mapset_info(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         return Ok(());
     }
 
-    let api = match Api::new().await {
+    let api = match Api::new(ctx).await {
         Ok(a) => a,
         Err(e) => {
             msg.channel_id.say(&ctx.http, "[ERROR] Failed to initialize api! Please inform the owner...").await?;

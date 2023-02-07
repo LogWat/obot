@@ -13,9 +13,11 @@ pub fn env_helper(key: &str) -> String {
     }
 }
 
-pub async fn get_env_from_context(ctx: &Context, key: &str) -> Result<String, String> {
+pub async fn get_env_from_context(ctx: &Context, key: &str) -> String {
     match ctx.data.read().await.get::<Env>().unwrap().lock().await.get(key) {
-        Some(v) => Ok(v.to_string()),
-        None => Err(format!("Failed to load environment variable {}", key)),
+        Some(v) => v.clone(),
+        None => {
+            panic!("Failed to load environment variable {}: {}", key, "Not found");
+        }
     }
 }

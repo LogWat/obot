@@ -1,5 +1,4 @@
 use std::{
-    env,
     error::Error,
     time,
     collections::HashMap,
@@ -11,13 +10,14 @@ use serenity::{
 use itertools::Itertools;
 
 use crate::cache::Database;
+use crate::utility;
 use crate::web::api;
 use api::Api;
 
 use super::api::Beatmap;
 
 // Beatmap構造体からいい感じにEmbed Messageを送る
-pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &ChannelId) -> Result<(), Box<dyn Error>> {
+pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &ChannelId) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (color, title_str) = match beatmapset.statu.as_str() {
         "ranked" => (0x00ff00, "Ranked"),
         "loved" => (0xff00ff, "Loved"),
@@ -26,7 +26,7 @@ pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &Chan
     };
 
     let star_str = star_string(&beatmapset.stars, &beatmapset.keys);
-    let url = api::get_url(&beatmapset);
+    let url = api::get_url(ctx, &beatmapset).await;
 
     match channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
@@ -43,6 +43,39 @@ pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &Chan
         Ok(_) => Ok(()),
         Err(e) => Err(Box::new(e)),
     }
+}
+
+
+// 複数件のBeatmapset情報を送りたい場合
+pub async fn simple_beatmap_send(ctx: &Context, beatmapsets: &Vec<Beatmap>, channel_id: &ChannelId) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let status = beatmapsets[0].statu.as_str();
+    let (color, title_str) = match status {
+        "ranked" => (0x00ff00, "Ranked"),
+        "loved" => (0xff00ff, "Loved"),
+        "qualified" => (0xffff00, "Qualified"),
+        _ => (0xeeeeee, "Graveyard"),
+    };
+
+    let mut msg = String::new();
+    for beatmapset in beatmapsets {
+        let star_str = simple_starstr(&beatmapset.stars, &beatmapset.keys);
+        let url = api::get_url(ctx, &beatmapset).await;
+        msg.push_str(&format!("[({}) {} {}]({})\n", beatmapset.id, beatmapset.title, star_str, url));
+    }
+
+    match channel_id.send_message(&ctx.http, |m| {
+        m.embed(|e| {
+            e.title(&format!("{} Beatmapsets", title_str))
+                .color(color)
+                .description(&msg)
+        });
+        m
+    }).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(Box::new(e)),
+    };
+
+    Ok(())
 }
 
 
@@ -106,6 +139,33 @@ pub fn star_string(star: &str, keys: &str) -> String {
     star_str
 }
 
+
+// gen string like "(key): (star) ~ (star)"
+pub fn simple_starstr(star: &str, keys: &str) -> String {
+    let star = star_to_vec(&star);
+    let keys = keys_to_vec(&keys);
+
+    let mut key: HashMap<&String, Vec<f32>> = HashMap::new();
+    for (k, s) in keys.iter().zip(star.iter()) {
+        key.entry(k).or_insert(Vec::new()).push(*s);
+    }
+
+    let mut star_str = String::new();
+    for k in key.keys().sorted() {
+        let stars = key.get(k).unwrap();
+        let max_star = stars.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+        let min_star = stars.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+
+        if max_star == min_star {
+            star_str.push_str(&format!("{}k: {} ", k, max_star));
+        } else {
+            star_str.push_str(&format!("{}k: {} ~ {} ", k, min_star, max_star));
+        }
+    }
+
+    star_str
+}
+
 pub fn keys_to_vec(keys: &str) -> Vec<String> {
     let mut key_vec = Vec::new();
     for k in keys.split(',') {
@@ -122,15 +182,14 @@ pub fn star_to_vec(star: &str) -> Vec<f32> {
     star_vec
 }
 
-// check ranked, loved, qualified beatmaps (50maps)
-// if there is a new map, post it to discord (using sqlx)
-// TODO: データベースに存在してるかどうかは上50件のみで判定するようにする
+// スケジューラから呼び出される関数
+// 各status, 4k, 7kの最新譜面50件を取得し，DBと比較して新規譜面があればDBに追加して特定のチャンネルに通知
 pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let now = time::SystemTime::now();
     info!("{}", format!("check_maps started at {:?}", now));
 
-    let api = match Api::new().await {
+    let api = match Api::new(ctx).await {
         Ok(a) => a,
         Err(e) => return Err(e),
     };
@@ -204,7 +263,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
     }
 
     // download maps
-    let path = env::var("MAP_PATH").unwrap();
+    let path = utility::get_env_from_context(ctx, "map_path").await;
     match api.download_beatmaps(download_maps, &path).await {
         Ok(_) => info!("{}", format!("Downloaded maps")),
         Err(e) => error!("{}", format!("Failed to download maps: {}", e)),

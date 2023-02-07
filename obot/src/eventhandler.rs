@@ -1,5 +1,4 @@
 use std::{
-    env,
     sync::Arc,
 };
 
@@ -16,16 +15,20 @@ use serenity::{
 
 use crate::scheduler;
 use crate::cache::{CommandCounter};
+use crate::utility;
 
 pub struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     // This is called when the bot starts up.
     async fn ready(&self, ctx: Context, ready: Ready) {
-        let log_channel_id: ChannelId = env::var("DISCORD_LOG_CHANNEL_ID")
-            .expect("DISCORD_LOG_CHANNEL_ID must be set")
-            .parse()
-            .expect("DISCORD_LOG_CHANNEL_ID must be a valid channel ID");
+        let log_channel_id: ChannelId = match utility::get_env_from_context(&ctx, "log_channel").await.parse() {
+            Ok(v) => v,
+            Err(e) => {
+                error!("Failed to parse log_channel: {}", e);
+                return;
+            }
+        };
         match log_channel_id.send_message(&ctx.http, |m| {
             m.embed(|e| {
                 e.title("Bot started")

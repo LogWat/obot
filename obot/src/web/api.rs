@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::{
-    env,
     collections::{HashMap},
     error::Error,
     fs::File,
@@ -9,6 +8,9 @@ use std::{
 };
 use futures::future;
 use serde_json::{Value};
+use serenity::prelude::*;
+
+use crate::utility;
 
 #[derive(Debug, Clone)]
 pub struct Beatmap {
@@ -35,17 +37,17 @@ pub struct Api {
     token: String,
 }
 
-pub fn get_url(beatmap: &Beatmap) -> String {
-    let base_url = env::var("API_BASE").expect("API_BASE must be set");
+pub async fn get_url(ctx: &Context, beatmap: &Beatmap) -> String {
+    let base_url = utility::get_env_from_context(ctx, "api_base").await;
     format!("{}/beatmapsets/{}", base_url, beatmap.id)
 }
 
 impl Api {
-    pub async fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let secret = env::var("API_SECRET").expect("API_SECRET must be set");
-        let user_id = env::var("USER_ID").expect("USER_ID must be set").parse::<u64>().unwrap();
-        let base_url = env::var("API_BASE").expect("API_BASE must be set");
-        let download_base_url = env::var("DOWNLOAD_BASE").expect("DOWNLOAD_BASE must be set");
+    pub async fn new(ctx: &Context) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let secret = utility::get_env_from_context(ctx, "api_secret").await;
+        let user_id = utility::get_env_from_context(ctx, "user_id").await.parse::<u64>()?;
+        let base_url = utility::get_env_from_context(ctx, "api_base").await;
+        let download_base_url = utility::get_env_from_context(ctx, "download_base").await;
         
         // get token
         let url = format!("{}/oauth/token", base_url);
@@ -105,50 +107,6 @@ impl Api {
         };
 
         Ok(beatmapsets)
-    }
-
-    pub async fn get_beatmaps(
-        &self,
-        mode: &str,
-        status: &str,
-        key: &str,
-        all_flag: bool,
-    ) -> Result<Vec<Beatmap>, Box<dyn Error + Send + Sync>> {
-        let mut bmsets = Vec::new();
-        let mut cursor_string = String::new();
-        let mut url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D{}&nsfw=&cursor_string={}",
-        self.base_url, mode, status, key, cursor_string);
-
-        loop {
-            let text = match self.req_with_token(&url).await {
-                Ok(text) => text,
-                Err(e) => {
-                    error!("Failed to get beatmaps: {}", e);
-                    break;
-                }
-            };
-            let beatmapsets = match self.text2beatmapsets(&text) {
-                Ok((beatmapsets, cursor)) => {
-                    cursor_string = cursor;
-                    beatmapsets
-                },
-                Err(e) => {
-                    error!("Failed to parse beatmaps: {}", e);
-                    break;
-                }
-            };
-            bmsets.extend(beatmapsets);
-            if all_flag {
-                url = format!("{}/api/v2/beatmapsets/search?m={}&s={}&q=key%3D4&nsfw=&cursor_string={}", self.base_url, mode, status, cursor_string);
-            } else {
-                break;
-            }
-            if cursor_string.is_empty() {
-                break;
-            }
-        }
-
-        Ok(bmsets)
     }
 
     // idからbeatmapset構造体を取得
@@ -259,7 +217,6 @@ impl Api {
                 beatmapset["preview_url"].as_str().unwrap()
             );
             let id = beatmapset["id"].as_u64().unwrap();
-            let favourite_count = beatmapset["favourite_count"].as_u64().unwrap();
             let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
             let status = beatmaps[0]["status"].as_str().unwrap();
             let star = beatmaps.iter().map(|beatmap| {
@@ -287,7 +244,7 @@ impl Api {
                 keys: key_str,
                 card_url: card_url.to_string(),
                 mp3_url,
-                cursor: cursor_string,
+                cursor: cursor_string.to_string(),
                 statu: status.to_string(),
             }
         }).collect::<Vec<Beatmap>>();
