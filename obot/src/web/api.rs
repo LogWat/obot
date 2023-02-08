@@ -102,7 +102,11 @@ impl Api {
             Err(e) => return Err(e),
         };
         let beatmapsets = match self.text2beatmapsets(&text) {
-            Ok((beatmapsets, cursor)) => (beatmapsets, cursor),
+            Ok((beatmapsets, cursor)) => {
+                let mut mapsets = beatmapsets.clone();
+                mapsets.reverse(); // 新しいものを配列中で最後尾にする => DBへの追加順を考慮
+                (mapsets, cursor)
+            },
             Err(e) => return Err(e.to_string().into()),
         };
 

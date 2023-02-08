@@ -36,7 +36,7 @@ pub async fn send_beatmap(ctx: &Context, beatmapset: &Beatmap, channel_id: &Chan
                 .url(&url)
                 .field("Artist", &beatmapset.artist, true)
                 .field("Creator", &beatmapset.creator, true)
-                .field("Star :star:", &star_str, false)
+                .field("Star ", &star_str, false)
         });
         m
     }).await {
@@ -60,12 +60,12 @@ pub async fn simple_beatmap_send(ctx: &Context, beatmapsets: &Vec<Beatmap>, chan
     for beatmapset in beatmapsets {
         let star_str = simple_starstr(&beatmapset.stars, &beatmapset.keys);
         let url = api::get_url(ctx, &beatmapset).await;
-        msg.push_str(&format!("[({}) {} {}]({})\n", beatmapset.id, beatmapset.title, star_str, url));
+        msg.push_str(&format!("[({}) {}]({}) {}\n", beatmapset.id, beatmapset.title, url, star_str));
     }
 
     match channel_id.send_message(&ctx.http, |m| {
         m.embed(|e| {
-            e.title(&format!("{} Beatmapsets", title_str))
+            e.title(&format!("{} Beatmapsets ({})", title_str, beatmapsets.len()))
                 .color(color)
                 .description(&msg)
         });
@@ -214,7 +214,7 @@ pub async fn check_maps(ctx: &Context) -> Result<(), Box<dyn Error + Send + Sync
             };
 
             let mut new_maps = Vec::new();
-            for map in maps.0.iter().rev() {
+            for map in maps.0.iter() {
                 if map.statu != status.to_string() {
                     continue;
                 }

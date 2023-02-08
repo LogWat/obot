@@ -40,7 +40,7 @@ extern crate log;
 #[group]
 #[description("Owner commands")]
 #[summary("サーバの管理者のみが実行できるコマンドです(ほぼデバッグ用)")]
-#[commands(shutdown, delmsg, infoc)]
+#[commands(shutdown, delmsg, infoc, init_database, update_database, dbtop)]
 struct Owner;
 
 #[group]
@@ -52,7 +52,7 @@ struct General;
 #[group]
 #[description("Game commands")]
 #[summary("ゲームに関するコマンドです(一部管理者権限が必要)")]
-#[commands(newmaps, update_database, dlmaps, mapset_info, init_database)]
+#[commands(newmaps, dlmaps, mapset_info, dbsize)]
 struct Game;
 
 #[tokio::main]
