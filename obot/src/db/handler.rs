@@ -16,6 +16,7 @@ pub struct DBHandler {
 }
 
 // TODO: statusごとにSQL文作ってる問題を解決する
+// TODO: cursor_stirng の更新処理
 impl DBHandler {
     pub async fn new(ctx: &Context) -> Self {
         let data = ctx.data.read().await;
@@ -217,31 +218,36 @@ impl DBHandler {
 
 
     // select_by: keys, stars
-    pub async fn select_with_limit(&self, select_by: &str, status: &str, _value: &str, limit: i64, offset: i64) -> Result<Vec<Beatmap>, Box<dyn Error + Sync + Send>> {
+    pub async fn select_with_limit(&self, select_by: &str, status: &str, value: &str, limit: i64, offset: i64) -> Result<Vec<Beatmap>, Box<dyn Error + Sync + Send>> {
         let db = self.db.lock().await;
+        let key_str = format!("%{}%", value);
 
         let res = match status {
             "ranked" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    "keys" => sqlx::query_as!(Beatmap, "SELECT * FROM ranked_beatmapsets WHERE keys LIKE ? LIMIT ? OFFSET ?", key_str, limit, offset).fetch_all(&*db).await,
                     _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "loved" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    "keys" => sqlx::query_as!(Beatmap, "SELECT * FROM loved_beatmapsets WHERE keys LIKE ? LIMIT ? OFFSET ?", key_str, limit, offset).fetch_all(&*db).await,
                     _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             "qualified" => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    "keys" => sqlx::query_as!(Beatmap, "SELECT * FROM qualified_beatmapsets WHERE keys LIKE ? LIMIT ? OFFSET ?", key_str, limit, offset).fetch_all(&*db).await,
                     _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
             _ => {
                 match select_by {
                     "*" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets LIMIT ? OFFSET ?", limit, offset).fetch_all(&*db).await,
+                    "keys" => sqlx::query_as!(Beatmap, "SELECT * FROM graveyard_beatmapsets WHERE keys LIKE ? LIMIT ? OFFSET ?", key_str, limit, offset).fetch_all(&*db).await,
                     _ => return Err(Box::new(StdError::new(ErrorKind::Other, "Invalid select_by"))),
                 }
             },
