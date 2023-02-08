@@ -345,13 +345,8 @@ async fn dbsize(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
     let mut embed = CreateEmbed::default();
     embed.title("DB size");
     embed.color(0x00ffff);
-    embed.footer(|f| {
-        f.text("OBOT");
-        f.icon_url(ctx.cache.current_user().face());
-        f
-    });
-    for s in &status {
-        for k in &key {
+    for k in &key {
+        for s in &status {
             let size = match db.get_db_size(s, k).await {
                 Ok(s) => s,
                 Err(e) => {
@@ -360,7 +355,7 @@ async fn dbsize(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
                     return Ok(());
                 }
             };
-            embed.field(format!("{}({}k)", s, k), format!("{} mapsets", size), false);
+            embed.field(format!("{}({}k)", s, k), format!("{} mapsets", size), true);
         }
     }
 
@@ -371,6 +366,88 @@ async fn dbsize(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
         });
         m
     }).await?;
+
+    Ok(())
+}
+
+#[command]
+#[description("譜面情報格納DBの先頭の譜面情報を表示します(最大10件)")]
+#[usage("[status] (default: ranked), [key] (default: 4) [num] (default: 1)")]
+#[max_args(4)]
+#[min_args(0)]
+async fn dbtop(ctx: &Context, msg: &Message, arg: Args) -> CommandResult {
+    if owner::is_owner(&ctx, msg.author.id).await == false {
+        msg.channel_id.say(&ctx.http, "You are not the owner").await?;
+        return Ok(());
+    }
+    
+    let mut marg = arg.clone();
+    let status: Vec<&str> = match marg.single::<String>() {
+        Ok(s) => {
+            match s.as_str() {
+                "ranked" => vec!["ranked"],
+                "loved" => vec!["loved"],
+                "qualified" => vec!["qualified"],
+                "all" => vec!["ranked", "loved", "qualified"],
+                _ => vec!["ranked"]
+            }
+        },
+        Err(_) => vec!["ranked"]
+    };
+    let key: Vec<&str> = match marg.single::<String>() {
+        Ok(s) => {
+            match s.as_str() {
+                "4" => vec!["4"],
+                "7" => vec!["7"],
+                "all" => vec!["4", "7"],
+                _ => vec!["4"]
+            }
+        },
+        Err(_) => vec!["4"]
+    };
+    let num: usize = match marg.single::<String>() {
+        Ok(s) => {
+            match s.parse::<usize>() {
+                Ok(n) => n,
+                Err(_) => 1
+            }
+        },
+        Err(_) => 1
+    };
+    if num > 10 {
+        msg.channel_id.say(&ctx.http, "num must be less than 10").await?;
+        return Ok(());
+    }
+
+    let db = DBHandler::new(ctx).await;
+    for k in &key {
+        for s in &status {
+            let db_size = match db.get_db_size(s, k).await {
+                Ok(s) => s,
+                Err(e) => {
+                    msg.channel_id.say(&ctx.http, format!("Failed to get {}({}k) db size...", s, k)).await?;
+                    error!("Failed to get {}({}k) db size: {}", s, k, e);
+                    return Ok(());
+                }
+            };
+            let offset = if db_size > num as i32 { db_size - num as i32 } else { 0 };
+            let topmapsets = match db.select_with_limit("keys", s, k, num as i64, offset as i64).await {
+                Ok(t) => t,
+                Err(e) => {
+                    msg.channel_id.say(&ctx.http, format!("Failed to get {}({}k) db top...", s, k)).await?;
+                    error!("Failed to get {}({}k) db top: {}", s, k, e);
+                    return Ok(());
+                }
+            };
+            match web_handler::simple_beatmap_send(ctx, &topmapsets, &msg.channel_id).await {
+                Ok(_) => (),
+                Err(e) => {
+                    error!("Failed to send beatmap: {}", e);
+                    continue;
+                }
+            }
+        }
+    }
 
     Ok(())
 }
