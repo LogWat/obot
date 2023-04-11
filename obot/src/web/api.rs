@@ -224,11 +224,11 @@ impl Api {
             let beatmaps = beatmapset["beatmaps"].as_array().unwrap();
             let status = beatmaps[0]["status"].as_str().unwrap();
             let star = beatmaps.iter().map(|beatmap| {
-                beatmap["difficulty_rating"].as_f64().unwrap() as f32
-            }).collect::<Vec<f32>>();
+                beatmap["difficulty_rating"].as_f64().unwrap() as f64
+            }).collect::<Vec<f64>>();
             let key = beatmaps.iter().map(|beatmap| {
-                beatmap["cs"].as_f64().unwrap() as f32
-            }).collect::<Vec<f32>>();
+                beatmap["cs"].as_f64().unwrap() as f64
+            }).collect::<Vec<f64>>();
 
             let mut star_str = String::new();
             let mut key_str = String::new();
@@ -236,8 +236,8 @@ impl Api {
                 star_str.push_str(&format!("{},", s));
                 key_str.push_str(&format!("{},", k));
             }
-            star_str.pop();
-            star_str.pop();
+            star_str = star_str[0..star_str.len() - 1].to_string();
+            key_str = key_str[0..key_str.len() - 1].to_string();
 
             Beatmap {
                 id: id as i64,
