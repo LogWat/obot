@@ -37,8 +37,10 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        sudo apt-get install libpq-dev -y
-        cargo install sqlx-cli
+        if ! command -v sqlx > /dev/null; then
+          sudo apt-get install libssl-dev -y
+          cargo install sqlx-cli
+        fi
 
     - name: Run Migrations
       run: |
