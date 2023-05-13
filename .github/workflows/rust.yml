@@ -22,6 +22,19 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v3
 
+    - name: Cache Cargo Dependencies
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/bin
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
     - name: Install Dependencies
       run: |
         sudo apt-get install libpq-dev -y
