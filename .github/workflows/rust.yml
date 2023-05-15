@@ -39,7 +39,7 @@ jobs:
       run: |
         if ! command -v sqlx > /dev/null; then
           sudo apt-get install libssl-dev -y
-          cargo install sqlx-cli
+          cargo install sqlx-cli --no-default-features --features native-tls,sqlite
         fi
 
     - name: Run Migrations
