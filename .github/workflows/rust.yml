@@ -10,27 +10,45 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build-and-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: obot
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Cache Cargo Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Install Dependencies
+      run: |
+        if ! command -v sqlx > /dev/null; then
+          sudo apt-get install libssl-dev -y
+          cargo install sqlx-cli --no-default-features --features native-tls,sqlite
+        fi
+
+    - name: Run Migrations
+      run: |
+        sqlx database create
+        sqlx migrate run
+
     - name: Build
-      run: |
-        sudo apt-get install libpq-dev -y
-        cargo install sqlx-cli
-        sqlx database create
-        sqlx migrate run
-        cargo build --release
-      working-directory: obot
+      run: cargo build --release
+
     - name: Run tests
-      run: |
-        sudo apt-get install libpq-dev -y
-        cargo install sqlx-cli
-        sqlx database create
-        sqlx migrate run
-        cargo test --release
-      working-directory: obot
+      run: cargo test --release
